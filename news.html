@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="kk">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>135 Мектеп — Жаңалықтар</title>
+<link rel="stylesheet" href="css/main.css">
+<link rel="stylesheet" href="css/animations.css">
+<style>
+.news-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:20px}
+.news-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;cursor:pointer;transition:var(--transition)}
+.news-card:hover{box-shadow:var(--shadow);transform:translateY(-3px)}
+.news-cover{height:160px;background:linear-gradient(135deg,#1D4ED8,#7C3AED);display:flex;align-items:center;justify-content:center;font-size:40px;overflow:hidden;position:relative}
+.news-cover img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.news-body{padding:16px}
+.news-title{font-weight:700;font-size:15px;margin-bottom:6px;line-height:1.4;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.news-excerpt{font-size:13px;color:var(--text3);margin-bottom:12px;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;line-height:1.5}
+.news-meta{display:flex;align-items:center;justify-content:space-between;font-size:11px;color:var(--text4)}
+.news-hero{grid-column:1/-1}
+.news-hero .news-cover{height:300px}
+</style>
+</head>
+<body>
+<div id="toast-container"></div>
+<div id="app" class="app-layout">
+  <div class="main-content">
+    <header class="page-header">
+      <button class="hamburger-btn btn-ghost" id="hamburger-btn">☰</button>
+      <h1 class="ph-title">📰 Жаңалықтар</h1>
+      <div class="ph-actions" id="header-act"></div>
+    </header>
+    <div class="page-body page-enter" id="page-body"></div>
+  </div>
+</div>
+
+<!-- Add/Edit Modal -->
+<div class="modal-overlay" id="news-modal">
+  <div class="modal modal-lg">
+    <div class="modal-header"><div class="modal-title" id="modal-title">Жаңалық жазу</div><button class="modal-close" onclick="closeModal('news-modal')">✕</button></div>
+    <div class="modal-body">
+      <input type="hidden" id="edit-id">
+      <div class="form-group"><label class="form-label">Тақырып <span class="required">*</span></label><input id="f-title" class="form-control" placeholder="Жаңалық тақырыбы"></div>
+      <div class="form-group"><label class="form-label">Фон суреті <span class="required">*</span></label>
+        <div class="dropzone" id="cover-zone" onclick="document.getElementById('cover-inp').click()">
+          <div id="cover-preview" style="font-size:32px;text-align:center">🖼️</div>
+          <div class="dropzone-text" id="cover-txt">Суретті телефоннан немесе компьютерден таңдаңыз</div>
+          <div class="dropzone-hint">JPG, PNG — фон суреті болуы МІНДЕТТІ</div>
+        </div>
+        <input id="cover-inp" type="file" accept="image/*" style="display:none" onchange="previewCover(this)">
+      </div>
+      <div class="form-group"><label class="form-label">Мазмұн <span class="required">*</span></label><textarea id="f-content" class="form-control" rows="6" placeholder="Жаңалық мәтіні..."></textarea></div>
+      <div class="form-group"><label class="form-label">Күйі</label>
+        <select id="f-status" class="form-control"><option value="published">Жарияланған</option><option value="draft">Жобалама</option></select>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('news-modal')">Бас тарту</button>
+      <button class="btn btn-primary" id="save-btn" onclick="saveNews()">Жариялау</button>
+    </div>
+  </div>
+</div>
+
+<!-- Read Modal -->
+<div class="modal-overlay" id="read-modal">
+  <div class="modal modal-lg">
+    <div class="modal-header"><div class="modal-title" id="read-title"></div><button class="modal-close" onclick="closeModal('read-modal')">✕</button></div>
+    <div id="read-body" class="modal-body"></div>
+  </div>
+</div>
+
+<script src="js/shared.js"></script>
+<script>
+if(!initApp()) throw '';
+injectSidebar(); buildSidebar(); initSidebar();
+if(canPublishNews()) document.getElementById('header-act').innerHTML='<button class="btn btn-primary btn-sm" onclick="openAddModal()">+ Жаңалық жазу</button>';
+
+let coverFile=null, coverURL='';
+function previewCover(inp){
+  const f=inp.files[0]; if(!f) return;
+  coverFile=f;
+  coverURL=URL.createObjectURL(f);
+  document.getElementById('cover-preview').innerHTML=`<img src="${coverURL}" style="width:100%;height:120px;object-fit:cover;border-radius:var(--radius-sm)">`;
+  document.getElementById('cover-txt').textContent='✅ Сурет таңдалды!';
+}
+
+function render(){
+  const news=demoDB.get('news').filter(n=>n.status==='published'||canPublishNews());
+  const pb=document.getElementById('page-body');
+  if(!news.length){pb.innerHTML=`<div class="empty-state"><div class="empty-icon">📰</div><div class="empty-title">Жаңалық жоқ</div></div>`;return;}
+  pb.innerHTML=`<div class="news-grid">${news.map((n,i)=>`
+    <div class="news-card ${i===0&&news.length>2?'news-hero':''}" onclick="readNews('${n.id}')">
+      <div class="news-cover">${n.coverURL?`<img src="${n.coverURL}" onerror="this.style.display='none'">`:''}📰</div>
+      <div class="news-body">
+        ${n.status==='draft'?'<span class="badge badge-gray" style="margin-bottom:8px">Жобалама</span>':''}
+        <div class="news-title">${n.title}</div>
+        <div class="news-excerpt">${n.content||''}</div>
+        <div class="news-meta">
+          <span>📅 ${formatDate(n.createdAt)} • ${n.authorName||'Белгісіз'}</span>
+          <div style="display:flex;gap:8px">
+            <span>❤️ ${(n.likes||[]).length}</span>
+            <span>💬 ${(n.comments||[]).length}</span>
+            ${canPublishNews()?`<button onclick="event.stopPropagation();editNews('${n.id}')" style="background:none;border:none;cursor:pointer;font-size:14px">✏️</button>
+            <button onclick="event.stopPropagation();deleteNews('${n.id}')" style="background:none;border:none;cursor:pointer;font-size:14px">🗑️</button>`:''}
+          </div>
+        </div>
+      </div>
+    </div>`).join('')}</div>`;
+}
+
+function readNews(id){
+  const n=demoDB.find('news',id); if(!n) return;
+  document.getElementById('read-title').textContent=n.title;
+  const liked=(n.likes||[]).includes(currentUser.id);
+  document.getElementById('read-body').innerHTML=`
+    ${n.coverURL?`<div style="height:200px;border-radius:var(--radius);overflow:hidden;margin-bottom:16px"><img src="${n.coverURL}" style="width:100%;height:100%;object-fit:cover" onerror="this.parentNode.style.display='none'"></div>`:''}
+    <div class="text-xs text-muted mb-12">📅 ${formatDate(n.createdAt)} • ${n.authorName||'Белгісіз'} ${n.status==='draft'?'<span class="badge badge-gray">Жобалама</span>':''}</div>
+    <div style="line-height:1.8;font-size:14px;color:var(--text2);white-space:pre-wrap">${n.content||''}</div>
+    <div class="divider"></div>
+    <div style="display:flex;gap:10px;align-items:center;margin-bottom:16px">
+      <button class="btn ${liked?'btn-danger':'btn-secondary'} btn-sm" onclick="toggleLike('${id}')">❤️ ${(n.likes||[]).length} Лайк</button>
+    </div>
+    <div class="section-title">💬 Комментарийлер (${(n.comments||[]).length})</div>
+    <div id="comments-list" style="display:flex;flex-direction:column;gap:10px;margin-bottom:12px">
+      ${(n.comments||[]).map(c=>`<div style="background:var(--bg2);border-radius:var(--radius-sm);padding:10px">
+        <div style="font-size:12px;font-weight:700;margin-bottom:4px">👤 ${c.authorName} <span class="text-muted" style="font-weight:400">• ${formatDate(c.createdAt)}</span></div>
+        <div style="font-size:13px">${c.text}</div>
+      </div>`).join('')||'<div class="text-muted text-sm">Комментарий жоқ</div>'}
+    </div>
+    <div style="display:flex;gap:8px">
+      <input id="cm-inp" class="form-control" placeholder="Комментарий жазыңыз..." style="flex:1">
+      <button class="btn btn-primary btn-sm" onclick="addComment('${id}')">Жіберу</button>
+    </div>`;
+  openModal('read-modal');
+}
+
+function toggleLike(id){
+  const n=demoDB.find('news',id); if(!n) return;
+  const likes=[...(n.likes||[])];
+  const idx=likes.indexOf(currentUser.id);
+  if(idx>-1) likes.splice(idx,1); else likes.push(currentUser.id);
+  demoDB.update('news',id,{likes});
+  readNews(id); render();
+}
+
+function addComment(id){
+  const text=document.getElementById('cm-inp')?.value.trim(); if(!text) return;
+  const n=demoDB.find('news',id); if(!n) return;
+  const comments=[...(n.comments||[]),{authorName:currentUser.name,authorId:currentUser.id,text,createdAt:new Date().toISOString()}];
+  demoDB.update('news',id,{comments});
+  readNews(id); render();
+}
+
+function openAddModal(){
+  document.getElementById('modal-title').textContent='Жаңалық жазу';
+  document.getElementById('edit-id').value='';
+  document.getElementById('f-title').value='';
+  document.getElementById('f-content').value='';
+  document.getElementById('f-status').value='published';
+  document.getElementById('cover-preview').innerHTML='🖼️';
+  document.getElementById('cover-txt').textContent='Суретті телефоннан немесе компьютерден таңдаңыз';
+  coverFile=null; coverURL='';
+  document.getElementById('cover-inp').value='';
+  openModal('news-modal');
+}
+
+function editNews(id){
+  const n=demoDB.find('news',id); if(!n) return;
+  document.getElementById('modal-title').textContent='Жаңалықты өзгерту';
+  document.getElementById('edit-id').value=id;
+  document.getElementById('f-title').value=n.title||'';
+  document.getElementById('f-content').value=n.content||'';
+  document.getElementById('f-status').value=n.status||'published';
+  if(n.coverURL){document.getElementById('cover-preview').innerHTML=`<img src="${n.coverURL}" style="width:100%;height:80px;object-fit:cover;border-radius:6px">`;document.getElementById('cover-txt').textContent='✅ Сурет бар';}
+  coverURL=n.coverURL||''; coverFile=null;
+  openModal('news-modal');
+}
+
+function saveNews(){
+  const id=document.getElementById('edit-id').value;
+  const title=document.getElementById('f-title').value.trim();
+  const content=document.getElementById('f-content').value.trim();
+  if(!title){showToast('Тақырып енгізіңіз','error');return;}
+  if(!coverURL&&!coverFile&&!id){showToast('Фон суретін таңдаңыз! Фото міндетті!','error');return;}
+  if(!content){showToast('Мазмұн жазыңыз','error');return;}
+  const btn=document.getElementById('save-btn');
+  setLoading(btn,true);
+  const finalURL=coverFile?URL.createObjectURL(coverFile):coverURL;
+  setTimeout(()=>{
+    const data={title,content,coverURL:finalURL,status:document.getElementById('f-status').value,authorId:currentUser.id,authorName:currentUser.name};
+    if(id) demoDB.update('news',id,data);
+    else demoDB.add('news',{...data,likes:[],comments:[]});
+    setLoading(btn,false);
+    showToast(id?'Сақталды!':'Жарияланды!','success');
+    closeModal('news-modal');
+    render();
+  },600);
+}
+
+function deleteNews(id){showConfirm('Жаңалықты жою','',()=>{demoDB.delete('news',id);showToast('Жойылды','success');render();});}
+render();
+</script>
+</body>
+</html>

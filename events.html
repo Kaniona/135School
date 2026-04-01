@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="kk">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>135 Мектеп — Іс-шаралар</title>
+<link rel="stylesheet" href="css/main.css">
+<link rel="stylesheet" href="css/animations.css">
+<style>
+.event-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px}
+.event-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;cursor:pointer;transition:var(--transition)}
+.event-card:hover{box-shadow:var(--shadow);transform:translateY(-3px);border-color:var(--primary)}
+.event-cover{height:160px;background:linear-gradient(135deg,#7C3AED,#EC4899);display:flex;align-items:center;justify-content:center;font-size:40px;overflow:hidden;position:relative}
+.event-cover img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.event-body{padding:16px}
+.event-date-badge{display:inline-flex;flex-direction:column;align-items:center;background:var(--primary);color:#fff;border-radius:var(--radius-sm);padding:6px 12px;font-size:11px;margin-bottom:10px;min-width:50px;text-align:center}
+.event-date-day{font-size:20px;font-weight:800;line-height:1}
+.event-date-month{font-size:10px;opacity:.8}
+</style>
+</head>
+<body>
+<div id="toast-container"></div>
+<div id="app" class="app-layout">
+  <div class="main-content">
+    <header class="page-header">
+      <button class="hamburger-btn btn-ghost" id="hamburger-btn">☰</button>
+      <h1 class="ph-title">🎉 Іс-шаралар</h1>
+      <div class="ph-actions" id="header-act"></div>
+    </header>
+    <div class="page-body page-enter">
+      <div class="search-bar mb-16">
+        <div class="search-input-wrapper"><span class="icon">🔍</span><input id="search-inp" class="form-control" placeholder="Іс-шара атауы..." oninput="render()"></div>
+        <select id="cat-filter" class="form-control" style="width:160px" onchange="render()">
+          <option value="">Барлық санат</option>
+          <option value="Мереке">🎊 Мереке</option>
+          <option value="Спорт">⚽ Спорт</option>
+          <option value="Ғылым">🔬 Ғылым</option>
+          <option value="Мәдениет">🎭 Мәдениет</option>
+          <option value="Олимпиада">🏆 Олимпиада</option>
+          <option value="Басқа">📌 Басқа</option>
+        </select>
+      </div>
+      <div id="content"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Add/Edit Modal -->
+<div class="modal-overlay" id="event-modal">
+  <div class="modal modal-lg">
+    <div class="modal-header"><div class="modal-title" id="modal-title">Іс-шара жариялау</div><button class="modal-close" onclick="closeModal('event-modal')">✕</button></div>
+    <div class="modal-body">
+      <input type="hidden" id="edit-id">
+      <div class="form-group"><label class="form-label">Іс-шара атауы <span class="required">*</span></label><input id="f-title" class="form-control" placeholder="Іс-шара атауы"></div>
+      <div class="form-group"><label class="form-label">Фон суреті <span class="required">*</span></label>
+        <div class="dropzone" id="cover-zone" onclick="document.getElementById('cover-inp').click()">
+          <div id="cover-preview" style="font-size:32px;text-align:center">🖼️</div>
+          <div class="dropzone-text" id="cover-txt">Суретті телефоннан немесе компьютерден таңдаңыз</div>
+          <div class="dropzone-hint">JPG, PNG — іс-шара суреті МІНДЕТТІ</div>
+        </div>
+        <input id="cover-inp" type="file" accept="image/*" style="display:none" onchange="previewCover(this)">
+      </div>
+      <div class="form-grid">
+        <div class="form-group"><label class="form-label">Күні <span class="required">*</span></label><input id="f-date" class="form-control" type="date"></div>
+        <div class="form-group"><label class="form-label">Санат <span class="required">*</span></label>
+          <select id="f-cat" class="form-control">
+            <option value="Мереке">🎊 Мереке</option>
+            <option value="Спорт">⚽ Спорт</option>
+            <option value="Ғылым">🔬 Ғылым</option>
+            <option value="Мәдениет">🎭 Мәдениет</option>
+            <option value="Олимпиада">🏆 Олимпиада</option>
+            <option value="Басқа">📌 Басқа</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-group"><label class="form-label">Сипаттама</label><textarea id="f-desc" class="form-control" rows="4" placeholder="Іс-шара туралы..."></textarea></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('event-modal')">Бас тарту</button>
+      <button class="btn btn-primary" id="save-btn" onclick="saveEvent()">Жариялау</button>
+    </div>
+  </div>
+</div>
+
+<!-- Read Modal -->
+<div class="modal-overlay" id="read-modal">
+  <div class="modal modal-lg">
+    <div class="modal-header"><div class="modal-title" id="read-title"></div><button class="modal-close" onclick="closeModal('read-modal')">✕</button></div>
+    <div id="read-body" class="modal-body"></div>
+  </div>
+</div>
+
+<script src="js/shared.js"></script>
+<script>
+if(!initApp()) throw '';
+injectSidebar(); buildSidebar(); initSidebar();
+if(canPublishNews()) document.getElementById('header-act').innerHTML='<button class="btn btn-primary btn-sm" onclick="openAddModal()">+ Іс-шара жариялау</button>';
+
+let coverFile=null, coverURL='';
+function previewCover(inp){
+  const f=inp.files[0]; if(!f) return;
+  coverFile=f; coverURL=URL.createObjectURL(f);
+  document.getElementById('cover-preview').innerHTML=`<img src="${coverURL}" style="width:100%;height:100px;object-fit:cover;border-radius:6px">`;
+  document.getElementById('cover-txt').textContent='✅ Сурет таңдалды!';
+}
+
+function render(){
+  const events=demoDB.get('events');
+  const q=document.getElementById('search-inp').value.toLowerCase();
+  const cf=document.getElementById('cat-filter').value;
+  let filtered=events;
+  if(q) filtered=filtered.filter(e=>(e.title||'').toLowerCase().includes(q));
+  if(cf) filtered=filtered.filter(e=>e.category===cf);
+  filtered.sort((a,b)=>new Date(a.date)-new Date(b.date));
+  const c=document.getElementById('content');
+  if(!filtered.length){c.innerHTML=`<div class="empty-state"><div class="empty-icon">🎉</div><div class="empty-title">Іс-шара табылмады</div></div>`;return;}
+  c.innerHTML=`<div class="event-grid">${filtered.map(e=>{
+    const d=new Date(e.date); const soon=daysUntil(e.date);
+    return `<div class="event-card" onclick="readEvent('${e.id}')">
+      <div class="event-cover">${e.coverURL?`<img src="${e.coverURL}" onerror="this.style.display='none'">`:''}🎉</div>
+      <div class="event-body">
+        <div style="display:flex;align-items:flex-start;gap:10px;margin-bottom:10px">
+          <div class="event-date-badge">
+            <div class="event-date-day">${d.getDate()}</div>
+            <div class="event-date-month">${d.toLocaleDateString('ru-RU',{month:'short'})}</div>
+          </div>
+          <div>
+            <div class="fw-700 text-sm">${e.title}</div>
+            <span class="badge badge-purple" style="margin-top:4px">${e.category||'Басқа'}</span>
+          </div>
+        </div>
+        ${e.description?`<div style="font-size:12px;color:var(--text3);overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical">${e.description}</div>`:''}
+        <div class="text-xs text-muted mt-8">${soon>0?`📅 ${soon} күн қалды`:soon===0?'⏰ Бүгін!':'✅ Өткен іс-шара'}</div>
+        ${canPublishNews()?`<div style="display:flex;gap:6px;margin-top:10px">
+          <button class="btn btn-secondary btn-sm" onclick="event.stopPropagation();editEvent('${e.id}')">✏️</button>
+          <button class="btn btn-danger btn-sm" onclick="event.stopPropagation();deleteEvent('${e.id}')">🗑️</button>
+        </div>`:''}
+      </div>
+    </div>`;
+  }).join('')}</div>`;
+}
+
+function readEvent(id){
+  const e=demoDB.find('events',id); if(!e) return;
+  document.getElementById('read-title').textContent=e.title;
+  document.getElementById('read-body').innerHTML=`
+    ${e.coverURL?`<div style="height:200px;border-radius:var(--radius);overflow:hidden;margin-bottom:16px"><img src="${e.coverURL}" style="width:100%;height:100%;object-fit:cover" onerror="this.parentNode.style.display='none'"></div>`:''}
+    <div style="display:flex;gap:10px;align-items:center;margin-bottom:16px">
+      <span class="badge badge-purple">${e.category||'Басқа'}</span>
+      <span class="text-xs text-muted">📅 ${formatDate(e.date)}</span>
+    </div>
+    <div style="line-height:1.8;font-size:14px;color:var(--text2);white-space:pre-wrap">${e.description||'Сипаттама жоқ'}</div>`;
+  openModal('read-modal');
+}
+
+function openAddModal(){
+  document.getElementById('modal-title').textContent='Іс-шара жариялау';
+  document.getElementById('edit-id').value='';
+  document.getElementById('f-title').value='';
+  document.getElementById('f-date').value='';
+  document.getElementById('f-cat').value='Мереке';
+  document.getElementById('f-desc').value='';
+  document.getElementById('cover-preview').innerHTML='🖼️';
+  document.getElementById('cover-txt').textContent='Суретті телефоннан немесе компьютерден таңдаңыз';
+  coverFile=null; coverURL='';
+  document.getElementById('cover-inp').value='';
+  openModal('event-modal');
+}
+
+function editEvent(id){
+  const e=demoDB.find('events',id); if(!e) return;
+  document.getElementById('modal-title').textContent='Іс-шараны өзгерту';
+  document.getElementById('edit-id').value=id;
+  document.getElementById('f-title').value=e.title||'';
+  document.getElementById('f-date').value=e.date||'';
+  document.getElementById('f-cat').value=e.category||'Мереке';
+  document.getElementById('f-desc').value=e.description||'';
+  if(e.coverURL){document.getElementById('cover-preview').innerHTML=`<img src="${e.coverURL}" style="width:100%;height:80px;object-fit:cover;border-radius:6px">`;document.getElementById('cover-txt').textContent='✅ Сурет бар';}
+  coverURL=e.coverURL||''; coverFile=null;
+  openModal('event-modal');
+}
+
+function saveEvent(){
+  const id=document.getElementById('edit-id').value;
+  const title=document.getElementById('f-title').value.trim();
+  const date=document.getElementById('f-date').value;
+  const category=document.getElementById('f-cat').value;
+  if(!title){showToast('Іс-шара атауын енгізіңіз','error');return;}
+  if(!date){showToast('Күнін таңдаңыз','error');return;}
+  if(!coverURL&&!coverFile&&!id){showToast('Іс-шара суретін таңдаңыз! Фото міндетті!','error');return;}
+  const btn=document.getElementById('save-btn');
+  setLoading(btn,true);
+  const finalURL=coverFile?URL.createObjectURL(coverFile):coverURL;
+  setTimeout(()=>{
+    const data={title,date,category,description:document.getElementById('f-desc').value,coverURL:finalURL,createdBy:currentUser.id};
+    if(id) demoDB.update('events',id,data);
+    else demoDB.add('events',data);
+    setLoading(btn,false);
+    showToast((id?'Сақталды!':'Іс-шара жарияланды!'),'success');
+    closeModal('event-modal');
+    render();
+  },600);
+}
+
+function deleteEvent(id){showConfirm('Іс-шараны жою','',()=>{demoDB.delete('events',id);showToast('Жойылды','success');render();});}
+render();
+</script>
+</body>
+</html>

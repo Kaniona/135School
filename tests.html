@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="kk">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>135 Мектеп — Тесттер</title>
+<link rel="stylesheet" href="css/main.css">
+<link rel="stylesheet" href="css/animations.css">
+<style>
+.test-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px}
+.test-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:20px;transition:var(--transition)}
+.test-card:hover{box-shadow:var(--shadow);border-color:var(--primary);transform:translateY(-2px)}
+.q-block{background:var(--bg2);border-radius:var(--radius-sm);padding:14px;margin-bottom:10px;border:1px solid var(--border)}
+.q-num{font-size:11px;font-weight:700;color:var(--text4);margin-bottom:4px}
+</style>
+</head>
+<body>
+<div id="toast-container"></div>
+<div id="app" class="app-layout">
+  <div class="main-content">
+    <header class="page-header">
+      <button class="hamburger-btn btn-ghost" id="hamburger-btn">☰</button>
+      <h1 class="ph-title" id="page-title">📝 Тесттер</h1>
+      <div class="ph-actions" id="header-actions"></div>
+    </header>
+    <div class="page-body page-enter" id="page-content"></div>
+  </div>
+</div>
+
+<!-- Create Test Modal -->
+<div class="modal-overlay" id="test-modal">
+  <div class="modal modal-xl">
+    <div class="modal-header"><div class="modal-title" id="modal-title">Тест жасау</div><button class="modal-close" onclick="closeModal('test-modal')">✕</button></div>
+    <div class="modal-body">
+      <div class="form-grid">
+        <div class="form-group"><label class="form-label">Тест атауы <span class="required">*</span></label><input id="t-name" class="form-control" placeholder="Тест атауы"></div>
+        <div class="form-group"><label class="form-label">Пән <span class="required">*</span></label>
+          <select id="t-subj" class="form-control"><option value="">Таңдаңыз</option></select>
+        </div>
+      </div>
+      <div class="form-grid">
+        <div class="form-group"><label class="form-label">Уақыт шегі (мин, 0=шексіз)</label><input id="t-time" class="form-control" type="number" min="0" value="30" placeholder="30"></div>
+        <div class="form-group"><label class="form-label">Сынып(тар) <span class="required">*</span></label>
+          <div id="t-class-checks" style="display:flex;flex-wrap:wrap;gap:5px;margin-top:4px"></div>
+        </div>
+      </div>
+      <div class="divider"></div>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+        <div class="fw-700">Сұрақтар</div>
+        <button class="btn btn-secondary btn-sm" onclick="addQuestion()">+ Сұрақ қосу</button>
+      </div>
+      <div id="questions-list" style="display:flex;flex-direction:column;gap:10px"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('test-modal')">Бас тарту</button>
+      <button class="btn btn-primary" id="save-test-btn" onclick="saveTest()">Сақтау</button>
+    </div>
+  </div>
+</div>
+
+<!-- Take Test View -->
+<div id="take-test-view" style="display:none;position:fixed;inset:0;background:var(--bg);z-index:400;overflow-y:auto">
+  <div style="max-width:640px;margin:0 auto;padding:24px" id="take-test-content"></div>
+</div>
+
+<script src="js/shared.js"></script>
+<script>
+if(!initApp()) throw '';
+injectSidebar(); buildSidebar(); initSidebar();
+
+const canCreate = canTeach();
+const isSt = isStudent();
+if(canCreate) document.getElementById('header-actions').innerHTML='<button class="btn btn-primary btn-sm" onclick="openCreateModal()">+ Тест жасау</button>';
+
+SUBJECTS.forEach(s=>document.getElementById('t-subj').innerHTML+=`<option value="${s}">${s}</option>`);
+document.getElementById('t-class-checks').innerHTML=CLASSES.map(c=>`
+  <label style="display:flex;align-items:center;gap:4px;cursor:pointer;padding:4px 8px;background:var(--bg2);border-radius:var(--radius-sm);border:1px solid var(--border);font-size:11px">
+    <input type="checkbox" data-class="${c}" style="accent-color:var(--primary)">${c}</label>`).join('');
+
+function render(){
+  const tests=demoDB.get('tests');
+  const results=demoDB.get('test_results').filter(r=>r.studentId===currentUser.id);
+  const doneIds=results.map(r=>r.testId);
+  const c=document.getElementById('page-content');
+  if(!tests.length){c.innerHTML=`<div class="empty-state"><div class="empty-icon">📝</div><div class="empty-title">Тест табылмады</div></div>`;return;}
+  c.innerHTML=`<div class="test-grid">${tests.map(t=>{
+    const myResult=results.find(r=>r.testId===t.id);
+    const done=!!myResult;
+    return `<div class="test-card">
+      <div style="display:flex;align-items:start;justify-content:space-between;gap:8px;margin-bottom:12px">
+        <div><span class="badge badge-blue" style="margin-bottom:6px">${t.subject||'—'}</span><div class="fw-700" style="font-size:15px">${t.title}</div></div>
+        ${done?'<span class="badge badge-green">✓</span>':''}
+      </div>
+      <div class="flex gap-8 mb-8 flex-wrap">
+        <span class="badge badge-gray">⏱️ ${t.timeLimit?t.timeLimit+' мин':'Шексіз'}</span>
+        <span class="badge badge-gray">❓ ${(t.questions||[]).length} сұрақ</span>
+        <span class="badge badge-gray">📚 ${(t.classIds||[]).join(', ')}</span>
+      </div>
+      ${myResult?`<div class="card" style="padding:10px;margin-bottom:10px;background:var(--bg2)">
+        <div class="text-sm text-muted">Соңғы нәтиже</div>
+        <div class="fw-700" style="color:${myResult.percentage>=70?'var(--success)':'var(--error)'};font-size:18px">${myResult.score}/${myResult.maxScore} (${myResult.percentage}%)</div>
+      </div>`:''}
+      <div style="display:flex;gap:6px;flex-wrap:wrap">
+        ${isSt?`<button class="btn btn-primary btn-sm" onclick="startTest('${t.id}')">${done?'🔄 Қайта тапсыру':'▶ Тапсыру'}</button>`:''}
+        ${!isSt&&canCreate?`<button class="btn btn-danger btn-icon btn-sm" onclick="deleteTest('${t.id}')">🗑️</button>`:''}
+      </div>
+    </div>`;
+  }).join('')}</div>`;
+}
+
+let questions=[];
+function openCreateModal(){
+  questions=[];
+  document.getElementById('modal-title').textContent='Тест жасау';
+  document.getElementById('t-name').value='';
+  document.getElementById('t-subj').value='';
+  document.getElementById('t-time').value='30';
+  document.querySelectorAll('#t-class-checks input').forEach(i=>i.checked=false);
+  document.getElementById('questions-list').innerHTML='';
+  questions=[];
+  addQuestion();
+  openModal('test-modal');
+}
+
+function addQuestion(){
+  const idx=questions.length;
+  questions.push({text:'',options:['','','',''],correct:0,score:1});
+  const ql=document.getElementById('questions-list');
+  const div=document.createElement('div');
+  div.id=`q-blk-${idx}`;
+  div.className='q-block';
+  div.innerHTML=`<div class="q-num">Сұрақ ${idx+1} <button onclick="removeQ(${idx})" style="float:right;background:none;border:none;cursor:pointer;color:var(--error);font-size:12px">✕ Жою</button></div>
+    <input class="form-control" style="margin-bottom:8px" placeholder="Сұрақ мәтіні" oninput="questions[${idx}].text=this.value" id="qt-${idx}">
+    <div style="display:flex;flex-direction:column;gap:6px">
+      ${['А','Б','В','Г'].map((l,i)=>`<div style="display:flex;align-items:center;gap:8px">
+        <input type="radio" name="correct-${idx}" value="${i}" ${i===0?'checked':''} onchange="questions[${idx}].correct=${i}" style="accent-color:var(--success);flex-shrink:0">
+        <span class="badge badge-blue" style="width:24px;justify-content:center">${l}</span>
+        <input class="form-control" style="flex:1" placeholder="Жауап нұсқасы ${l}" oninput="questions[${idx}].options[${i}]=this.value" id="qo-${idx}-${i}">
+      </div>`).join('')}
+    </div>
+    <div class="flex gap-8 mt-8 items-center"><span class="text-xs text-muted">Балл: </span><input type="number" class="form-control" style="width:60px" value="1" min="1" oninput="questions[${idx}].score=+this.value"></div>`;
+  ql.appendChild(div);
+}
+
+function removeQ(idx){
+  const el=document.getElementById('q-blk-'+idx);
+  if(el) el.remove();
+  questions[idx]=null;
+}
+
+function getSelectedClasses2(){return Array.from(document.querySelectorAll('#t-class-checks input:checked')).map(i=>i.dataset.class);}
+
+function saveTest(){
+  const title=document.getElementById('t-name').value.trim();
+  const subject=document.getElementById('t-subj').value;
+  const classIds=getSelectedClasses2();
+  const timeLimit=+document.getElementById('t-time').value||0;
+  const qs=questions.filter(q=>q&&q.text);
+  if(!title){showToast('Тест атауын енгізіңіз','error');return;}
+  if(!subject){showToast('Пән таңдаңыз','error');return;}
+  if(!classIds.length){showToast('Сынып таңдаңыз','error');return;}
+  if(!qs.length){showToast('Кем дегенде 1 сұрақ қосыңыз','error');return;}
+  const btn=document.getElementById('save-test-btn');
+  setLoading(btn,true);
+  setTimeout(()=>{
+    demoDB.add('tests',{title,subject,classIds,teacherId:currentUser.id,timeLimit,isActive:true,questions:qs});
+    setLoading(btn,false);
+    showToast('Тест сақталды!','success');
+    closeModal('test-modal');
+    render();
+  },600);
+}
+
+function deleteTest(id){showConfirm('Тестті жою','',()=>{demoDB.delete('tests',id);showToast('Жойылды','success');render();});}
+
+let activeTest=null, answers=[], startTime=null, timerInterval=null;
+
+function startTest(id){
+  activeTest=demoDB.find('tests',id);
+  if(!activeTest){showToast('Тест табылмады','error');return;}
+  answers=new Array((activeTest.questions||[]).length).fill(null);
+  startTime=Date.now();
+  showTest();
+}
+
+function showTest(){
+  const tv=document.getElementById('take-test-view');
+  const tc=document.getElementById('take-test-content');
+  tv.style.display='block';
+  document.body.style.overflow='hidden';
+  const qs=activeTest.questions||[];
+  let timer=activeTest.timeLimit*60;
+  if(timerInterval) clearInterval(timerInterval);
+  let timerHTML=activeTest.timeLimit?`<div id="timer-display" class="countdown-timer">⏱️ <span id="timer-val">${fmtTimer(timer)}</span></div>`:'';
+  if(activeTest.timeLimit){
+    timerInterval=setInterval(()=>{
+      timer--;
+      const el=document.getElementById('timer-val');
+      if(el) el.textContent=fmtTimer(timer);
+      if(timer<=60) document.getElementById('timer-display')?.classList.add('danger');
+      if(timer<=0){clearInterval(timerInterval);submitTest();}
+    },1000);
+  }
+  tc.innerHTML=`<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
+    <div class="fw-700" style="font-size:16px">${activeTest.title}</div>
+    ${timerHTML}
+  </div>
+  <div id="questions-take">
+    ${qs.map((q,i)=>`<div class="question-card mb-12" id="qcard-${i}">
+      <div class="question-number">Сұрақ ${i+1}/${qs.length} • ${q.score||1} балл</div>
+      <div class="question-text">${q.text}</div>
+      ${(q.options||[]).map((opt,j)=>`<div class="answer-option" id="opt-${i}-${j}" onclick="selectAns(${i},${j})" data-qi="${i}" data-oi="${j}">
+        <div class="answer-letter">${'АБВГ'[j]}</div>
+        <div>${opt}</div>
+      </div>`).join('')}
+    </div>`).join('')}
+  </div>
+  <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:20px">
+    <button class="btn btn-secondary" onclick="cancelTest()">← Артқа</button>
+    <button class="btn btn-primary" onclick="confirmSubmit()">Тапсыру →</button>
+  </div>`;
+}
+
+function fmtTimer(s){const m=Math.floor(s/60),sec=s%60;return `${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}`;}
+
+function selectAns(qi,oi){
+  answers[qi]=oi;
+  const qs=activeTest.questions||[];
+  qs[qi].options.forEach((_,j)=>{
+    const el=document.getElementById(`opt-${qi}-${j}`);
+    if(el){el.classList.remove('selected');if(j===oi)el.classList.add('selected');}
+  });
+}
+
+function cancelTest(){
+  if(timerInterval) clearInterval(timerInterval);
+  document.getElementById('take-test-view').style.display='none';
+  document.body.style.overflow='';
+  activeTest=null;
+}
+
+function confirmSubmit(){
+  const unanswered=answers.filter(a=>a===null).length;
+  if(unanswered>0 && !confirm(`${unanswered} сұрақ жауапсыз. Тапсыру керек пе?`)) return;
+  submitTest();
+}
+
+function submitTest(){
+  if(timerInterval) clearInterval(timerInterval);
+  const qs=activeTest.questions||[];
+  let score=0,maxScore=0;
+  const revAnswers=qs.map((q,i)=>{
+    const pts=q.score||1; maxScore+=pts;
+    const selected=answers[i]; const correct=q.correct;
+    if(selected===correct) score+=pts;
+    return {selected,correct,isCorrect:selected===correct};
+  });
+  const pct=maxScore?Math.round(score/maxScore*100):0;
+  const result={testId:activeTest.id,studentId:currentUser.id,answers:revAnswers,score,maxScore,percentage:pct,startedAt:new Date(startTime).toISOString(),completedAt:new Date().toISOString()};
+  demoDB.add('test_results',result);
+  showResult(result,qs,revAnswers);
+}
+
+function showResult(result,qs,revAnswers){
+  const tc=document.getElementById('take-test-content');
+  const color=result.percentage>=70?'var(--success)':result.percentage>=50?'var(--warning)':'var(--error)';
+  const emoji=result.percentage>=70?'🎉':result.percentage>=50?'😊':'😔';
+  tc.innerHTML=`<div style="text-align:center;padding:30px 0">
+    <div style="font-size:60px;margin-bottom:12px">${emoji}</div>
+    <div class="fw-800" style="font-size:32px;color:${color}">${result.score}/${result.maxScore}</div>
+    <div class="fw-700 text-lg mb-8">${result.percentage}%</div>
+    <div class="text-muted">${result.percentage>=70?'Өте жақсы!':result.percentage>=50?'Жаман емес':'Жақсырақ оқу керек'}</div>
+    <div style="display:flex;gap:10px;justify-content:center;margin-top:20px">
+      <button class="btn btn-secondary" onclick="cancelTest();render()">← Кері</button>
+      <button class="btn btn-primary" onclick="startTest('${activeTest.id}')">🔄 Қайта тапсыру</button>
+    </div>
+  </div>
+  <div class="divider"></div>
+  <div class="section-title">Сұрақтар шолуы</div>
+  ${qs.map((q,i)=>{
+    const r=revAnswers[i]; const sel=r.selected; const cor=q.correct;
+    return `<div class="question-card mb-12" style="border-color:${r.isCorrect?'var(--success)':'var(--error)'}">
+      <div class="question-number">${r.isCorrect?'✅':'❌'} Сұрақ ${i+1}</div>
+      <div class="question-text">${q.text}</div>
+      ${(q.options||[]).map((opt,j)=>`<div class="answer-option ${j===cor?'correct':j===sel&&!r.isCorrect?'wrong':''}">
+        <div class="answer-letter">${'АБВГ'[j]}</div><div>${opt} ${j===cor?' ✓':''}</div>
+      </div>`).join('')}
+    </div>`;
+  }).join('')}`;
+}
+if(!localStorage.getItem('added_15_q_tests_v1')) {
+  const t1Qs = [
+    {id:'m1',text:'2+2=?',options:['4','5','3','6'],correct:0,score:1},
+    {id:'m2',text:'5*5=?',options:['20','25','15','30'],correct:1,score:1},
+    {id:'m3',text:'100/4=?',options:['20','25','50','40'],correct:1,score:1},
+    {id:'m4',text:'3^3=?',options:['9','18','27','81'],correct:2,score:1},
+    {id:'m5',text:'Түбір астындағы 144=?',options:['10','11','12','14'],correct:2,score:1},
+    {id:'m6',text:'20-ның 25% қанша?',options:['4','5','10','15'],correct:1,score:1},
+    {id:'m7',text:'(5+3)*2=?',options:['16','13','11','10'],correct:0,score:1},
+    {id:'m8',text:'sin(30°)=?',options:['1','0.5','0.866','0'],correct:1,score:1},
+    {id:'m9',text:'Шеңбердің ұзындығы формуласы?',options:['2πr','πr²','πd²','4πr'],correct:0,score:1},
+    {id:'m10',text:'log_2(8)=?',options:['2','3','4','8'],correct:1,score:1},
+    {id:'m11',text:'10! / 9! = ?',options:['10','1','90','100'],correct:0,score:1},
+    {id:'m12',text:'Үшбұрыштың ішкі бұрыштарының қосындысы?',options:['90°','180°','360°','270°'],correct:1,score:1},
+    {id:'m13',text:'Тік бұрышты үшбұрыштың гипотенузасы 5, катеті 3 болса, екінші катеті?',options:['3','4','5','6'],correct:1,score:1},
+    {id:'m14',text:'2^10 = ?',options:['512','1024','2048','100'],correct:1,score:1},
+    {id:'m15',text:'1-ден 100-ге дейінгі сандардың қосындысы?',options:['5000','5050','5100','4950'],correct:1,score:1}
+  ];
+  demoDB.add('tests', {title:'Математикадан Үлкен ҰБТ тест',subject:'Математика',classIds:['10','11'],teacherId:currentUser.id,timeLimit:45,isActive:true,questions:t1Qs});
+  
+  const t2Qs = [
+    {id:'i1',text:'Бір байтта қанша бит бар?',options:['4','8','16','32'],correct:1,score:1},
+    {id:'i2',text:'WWW мағынасы?',options:['World Wide Web','World Web Wide','Web World Wide','Wide World Web'],correct:0,score:1},
+    {id:'i3',text:'CPU қазақша қалай аталады?',options:['Пернетақта','Орталық процессор','Қатты диск','Аналық плата'],correct:1,score:1},
+    {id:'i4',text:'Ең танымал операциялық жүйе?',options:['Linux','Windows','MacOS','ChromeOS'],correct:1,score:1},
+    {id:'i5',text:'HTML нені білдіреді?',options:['HyperText Markup Language','High Text Markup Language','Hyper Tabular Markup Language','None'],correct:0,score:1},
+    {id:'i6',text:'IP мекенжай неше бөліктен тұрады (IPv4)?',options:['2','3','4','6'],correct:2,score:1},
+    {id:'i7',text:'Екілік санау жүйесінің негізі?',options:['2','10','8','16'],correct:0,score:1},
+    {id:'i8',text:'RAM дегеніміз не?',options:['Тұрақты жады','Жедел жады','Сыртқы жады','Флеш жады'],correct:1,score:1},
+    {id:'i9',text:'Ақпарат көлемінің ең кіші өлшем бірлігі?',options:['Байт','Бит','Килобайт','Мегабайт'],correct:1,score:1},
+    {id:'i10',text:'Бір кибибайт (KiB) қанша байтқа тең?',options:['1000','1024','100','8'],correct:1,score:1},
+    {id:'i11',text:'Алгоритмнің график түрінде берілуі қалай аталады?',options:['Мәтіндік','Блок-схема','Псевдокод','Бағдарлама'],correct:1,score:1},
+    {id:'i12',text:'Көбейту амалы бағдарламалауда қандай таңбамен белгіленеді?',options:['x','*','.','#'],correct:1,score:1},
+    {id:'i13',text:'Python бағдарламалау тілі ме?',options:['Иә','Жоқ','Білмеймін','Мүмкін'],correct:0,score:1},
+    {id:'i14',text:'LAN дегеніміз не?',options:['Ауқымды желі','Жергілікті желі','Ғаламтор','Жеке желі'],correct:1,score:1},
+    {id:'i15',text:'Ақпаратты енгізу құрылғысы?',options:['Монитор','Принтер','Пернетақта','Колонка'],correct:2,score:1}
+  ];
+  demoDB.add('tests', {title:'Информатика: Қорытынды бақылау',subject:'Информатика',classIds:['9','10'],teacherId:currentUser.id,timeLimit:30,isActive:true,questions:t2Qs});
+  
+  localStorage.setItem('added_15_q_tests_v1', '1');
+}
+
+render();
+</script>
+</body>
+</html>

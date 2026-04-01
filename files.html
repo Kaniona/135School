@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="kk">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>135 Мектеп — Файлдар</title>
+<link rel="stylesheet" href="css/main.css">
+<link rel="stylesheet" href="css/animations.css">
+</head>
+<body>
+<div id="toast-container"></div>
+<div id="app" class="app-layout">
+  <div class="main-content">
+    <header class="page-header">
+      <button class="hamburger-btn btn-ghost" id="hamburger-btn">☰</button>
+      <h1 class="ph-title">📁 Файлдар</h1>
+      <div class="ph-actions" id="header-act"></div>
+    </header>
+    <div class="page-body page-enter">
+      <div class="search-bar mb-16">
+        <div class="search-input-wrapper"><span class="icon">🔍</span><input id="search-inp" class="form-control" placeholder="Файл атауы..." oninput="render()"></div>
+        <select id="cat-filter" class="form-control" style="width:200px" onchange="render()">
+          <option value="">Барлық санат</option>
+          <option value="Оқу материалдары">📚 Оқу материалдары</option>
+          <option value="Формалар">📋 Формалар</option>
+          <option value="Басқа">📁 Басқа</option>
+        </select>
+      </div>
+
+      <!-- Upload dropzone (for admins/teachers) -->
+      <div id="upload-section" style="display:none;margin-bottom:20px">
+        <div class="card">
+          <div class="card-header"><span class="card-title">📤 Файл жүктеу</span></div>
+          <div class="card-body">
+            <div class="dropzone" id="file-dropzone" onclick="document.getElementById('file-inp').click()">
+              <div class="dropzone-icon">📎</div>
+              <div class="dropzone-text" id="file-txt">Файлды таңдаңыз немесе осы алаңға сүйреңіз</div>
+              <div class="dropzone-hint">PDF, DOC, DOCX, JPG, PNG, XLS, XLSX (макс. 50MB)</div>
+            </div>
+            <input id="file-inp" type="file" multiple accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.xls,.xlsx" style="display:none" onchange="handleFileSelect(this)">
+            <div id="files-to-upload" style="display:flex;flex-direction:column;gap:6px;margin-top:8px"></div>
+            <div id="upload-form" style="display:none;margin-top:12px">
+              <div class="form-grid">
+                <div class="form-group"><label class="form-label">Санат</label>
+                  <select id="f-cat" class="form-control">
+                    <option value="Оқу материалдары">📚 Оқу материалдары</option>
+                    <option value="Формалар">📋 Формалар</option>
+                    <option value="Басқа">📁 Басқа</option>
+                  </select>
+                </div>
+                <div style="display:flex;align-items:flex-end">
+                  <button class="btn btn-primary w-full" onclick="uploadFiles()">📤 Жүктеу</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Files table -->
+      <div class="card" id="content">
+        <div class="table-wrapper" style="border:none;border-radius:0">
+          <table>
+            <thead><tr><th>Атауы</th><th>Санат</th><th>Өлшемі</th><th>Жүктеген</th><th>Күні</th><th>Әрекет</th></tr></thead>
+            <tbody id="files-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="js/shared.js"></script>
+<script>
+if(!initApp()) throw '';
+if(!hasAnyRole(['super_admin','admin','teacher','class_teacher','director','deputy_director'])){location.href='dashboard.html';throw '';}
+injectSidebar(); buildSidebar(); initSidebar();
+
+if(isAdmin()||canTeach()) document.getElementById('upload-section').style.display='';
+
+let pendingFiles=[];
+
+function fileIcon(name){
+  const ext=(name||'').split('.').pop().toLowerCase();
+  if(['pdf'].includes(ext)) return '📄';
+  if(['doc','docx'].includes(ext)) return '📝';
+  if(['xls','xlsx'].includes(ext)) return '📊';
+  if(['jpg','jpeg','png','gif'].includes(ext)) return '🖼️';
+  return '📁';
+}
+
+function formatSize(bytes){
+  if(!bytes) return '—';
+  if(bytes<1024) return bytes+'B';
+  if(bytes<1048576) return Math.round(bytes/1024)+'KB';
+  return (bytes/1048576).toFixed(1)+'MB';
+}
+
+function handleFileSelect(inp){
+  pendingFiles=Array.from(inp.files);
+  const wrap=document.getElementById('files-to-upload');
+  wrap.innerHTML=pendingFiles.map(f=>`
+    <div style="display:flex;align-items:center;gap:10px;padding:8px;background:var(--bg2);border-radius:var(--radius-sm);border:1px solid var(--border)">
+      <span style="font-size:20px">${fileIcon(f.name)}</span>
+      <div style="flex:1;min-width:0"><div class="fw-600 truncate">${f.name}</div><div class="text-xs text-muted">${formatSize(f.size)}</div></div>
+    </div>`).join('');
+  document.getElementById('upload-form').style.display=pendingFiles.length?'block':'none';
+  document.getElementById('file-txt').textContent=`✅ ${pendingFiles.length} файл таңдалды`;
+}
+
+// Drag & drop
+const dz=document.getElementById('file-dropzone');
+['dragenter','dragover'].forEach(e=>dz.addEventListener(e,ev=>{ev.preventDefault();dz.classList.add('drag-over');}));
+['dragleave','drop'].forEach(e=>dz.addEventListener(e,ev=>{ev.preventDefault();dz.classList.remove('drag-over');}));
+dz.addEventListener('drop',ev=>{
+  const files=Array.from(ev.dataTransfer.files);
+  pendingFiles=files;
+  const inp=document.getElementById('file-inp');
+  document.getElementById('files-to-upload').innerHTML=files.map(f=>`
+    <div style="display:flex;align-items:center;gap:10px;padding:8px;background:var(--bg2);border-radius:var(--radius-sm);border:1px solid var(--border)">
+      <span style="font-size:20px">${fileIcon(f.name)}</span>
+      <div style="flex:1;min-width:0"><div class="fw-600 truncate">${f.name}</div><div class="text-xs text-muted">${formatSize(f.size)}</div></div>
+    </div>`).join('');
+  document.getElementById('upload-form').style.display=files.length?'block':'none';
+  document.getElementById('file-txt').textContent=`✅ ${files.length} файл таңдалды`;
+});
+
+function uploadFiles(){
+  if(!pendingFiles.length){showToast('Файл таңдаңыз','error');return;}
+  const category=document.getElementById('f-cat').value;
+  pendingFiles.forEach(f=>{
+    demoDB.add('files',{name:f.name,fileURL:URL.createObjectURL(f),type:f.type,size:f.size,category,uploadedBy:currentUser.id,uploaderName:currentUser.name});
+  });
+  showToast(`${pendingFiles.length} файл жүктелді!`,'success');
+  pendingFiles=[];
+  document.getElementById('files-to-upload').innerHTML='';
+  document.getElementById('upload-form').style.display='none';
+  document.getElementById('file-txt').textContent='Файлды таңдаңыз немесе осы алаңға сүйреңіз';
+  document.getElementById('file-inp').value='';
+  render();
+}
+
+function render(){
+  let files=demoDB.get('files');
+  const q=document.getElementById('search-inp').value.toLowerCase();
+  const cf=document.getElementById('cat-filter').value;
+  if(q) files=files.filter(f=>(f.name||'').toLowerCase().includes(q));
+  if(cf) files=files.filter(f=>f.category===cf);
+  const tbody=document.getElementById('files-tbody');
+  if(!files.length){
+    tbody.innerHTML=`<tr><td colspan="6"><div class="empty-state"><div class="empty-icon">📁</div><div class="empty-title">Файл табылмады</div></div></td></tr>`;
+    return;
+  }
+  tbody.innerHTML=files.map(f=>`<tr>
+    <td><div style="display:flex;align-items:center;gap:10px"><span style="font-size:22px">${fileIcon(f.name)}</span><div><div class="fw-600">${f.name||'—'}</div></div></div></td>
+    <td><span class="badge badge-blue">${f.category||'Басқа'}</span></td>
+    <td class="text-muted">${formatSize(f.size)}</td>
+    <td class="text-muted">${f.uploaderName||'—'}</td>
+    <td class="text-muted" style="font-size:12px">${formatDate(f.createdAt)||'—'}</td>
+    <td><div style="display:flex;gap:6px">
+      <a href="${f.fileURL}" target="_blank" class="btn btn-secondary btn-sm btn-icon" title="Жүктеу">⬇️</a>
+      ${isAdmin()?`<button class="btn btn-danger btn-sm btn-icon" onclick="deleteFile('${f.id}')">🗑️</button>`:''}
+    </div></td>
+  </tr>`).join('');
+}
+
+function deleteFile(id){showConfirm('Файлды жою','',()=>{demoDB.delete('files',id);showToast('Жойылды','success');render();});}
+render();
+</script>
+</body>
+</html>
