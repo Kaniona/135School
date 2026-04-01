@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="kk">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>135 Мектеп — Оқушылар</title>
+<link rel="stylesheet" href="css/main.css">
+<link rel="stylesheet" href="css/animations.css">
+<style>
+.student-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:16px}
+.student-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:20px;text-align:center;cursor:pointer;transition:var(--transition);position:relative}
+.student-card:hover{transform:translateY(-4px);box-shadow:var(--shadow);border-color:var(--primary)}
+.student-card .avatar{margin:0 auto 12px}
+.student-name{font-weight:700;font-size:14px;margin-bottom:4px}
+.student-class{font-size:12px;color:var(--text3);margin-bottom:8px}
+.student-achieve{font-size:16px;letter-spacing:2px}
+@media(max-width:640px){.student-grid{grid-template-columns:1fr 1fr}}
+</style>
+</head>
+<body>
+<div id="toast-container"></div>
+<div id="app" class="app-layout">
+  <div class="main-content">
+    <header class="page-header">
+      <button class="hamburger-btn btn-ghost" id="hamburger-btn">☰</button>
+      <h1 class="ph-title">🎓 Оқушылар</h1>
+      <div class="ph-actions">
+        <div class="tabs" id="view-tabs">
+          <button class="tab-btn active" onclick="setView('grid',this)">▦ Карточкалар</button>
+          <button class="tab-btn" onclick="setView('table',this)">☰ Кесте</button>
+        </div>
+        <button class="btn btn-primary btn-sm" id="add-btn" onclick="openAddModal()" style="display:none">+ Қосу</button>
+      </div>
+    </header>
+    <div class="page-body page-enter">
+      <div class="search-bar mb-16">
+        <div class="search-input-wrapper"><span class="icon">🔍</span><input id="search-inp" class="form-control" placeholder="Аты бойынша..." oninput="render()"></div>
+        <select id="class-filter" class="form-control" style="width:130px" onchange="render()">
+          <option value="">Барлық сынып</option>
+        </select>
+      </div>
+      <div id="content"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Add/Edit Modal -->
+<div class="modal-overlay" id="student-modal">
+  <div class="modal modal-lg">
+    <div class="modal-header"><div class="modal-title" id="modal-title">Оқушы қосу</div><button class="modal-close" onclick="closeModal('student-modal')">✕</button></div>
+    <div class="modal-body">
+      <input type="hidden" id="edit-id">
+      <div class="form-grid">
+        <div class="form-group"><label class="form-label">Аты <span class="required">*</span></label><input id="f-first" class="form-control" placeholder="Аты"></div>
+        <div class="form-group"><label class="form-label">Тегі <span class="required">*</span></label><input id="f-last" class="form-control" placeholder="Тегі"></div>
+        <div class="form-group"><label class="form-label">Сынып <span class="required">*</span></label>
+          <select id="f-class" class="form-control"><option value="">Таңдаңыз</option></select>
+        </div>
+        <div class="form-group"><label class="form-label">Туған күні</label><input id="f-birth" class="form-control" type="date"></div>
+        <div class="form-group"><label class="form-label">Ата-анасының аты</label><input id="f-parent" class="form-control" placeholder="Ата-анасының аты"></div>
+        <div class="form-group"><label class="form-label">Байланыс телефоны</label><input id="f-contact" class="form-control" placeholder="+77001234567"></div>
+        <div class="form-group"><label class="form-label">Кіру паролі (міндетті емес)</label><input id="f-pw" class="form-control" type="password" placeholder="Жүйеге кіру үшін"></div>
+      </div>
+      <div class="form-group"><label class="form-label">Жетістіктер (эмодзи)</label><input id="f-achieve" class="form-control" placeholder="мыс: 🥇 📚 ⚽"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('student-modal')">Бас тарту</button>
+      <button class="btn btn-primary" id="save-btn" onclick="saveStudent()">Сақтау</button>
+    </div>
+  </div>
+</div>
+
+<!-- Profile Modal -->
+<div class="modal-overlay" id="profile-modal">
+  <div class="modal modal-lg">
+    <div class="modal-header"><div class="modal-title">Оқушы профилі</div><button class="modal-close" onclick="closeModal('profile-modal')">✕</button></div>
+    <div id="profile-content" class="modal-body"></div>
+  </div>
+</div>
+
+<script src="js/shared.js"></script>
+<script>
+if(!initApp()) throw '';
+if(!hasAnyRole(['super_admin','admin','director','deputy_director','class_teacher','teacher'])) { location.href='dashboard.html'; throw ''; }
+injectSidebar(); buildSidebar(); initSidebar();
+
+let viewMode = 'grid';
+
+// Populate classes dropdown
+function populateClasses() {
+  const sels = document.querySelectorAll('#class-filter, #f-class');
+  CLASSES.forEach(c => {
+    sels.forEach(sel => sel.innerHTML += `<option value="${c}">${c}</option>`);
+  });
+}
+populateClasses();
+
+if(isAdmin()) document.getElementById('add-btn').style.display='';
+
+function setView(v, btn) {
+  viewMode = v;
+  document.querySelectorAll('#view-tabs .tab-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  render();
+}
+
+function filteredStudents() {
+  let s = demoDB.get('students');
+  const q = document.getElementById('search-inp').value.toLowerCase();
+  const cf = document.getElementById('class-filter').value;
+  if(q) s=s.filter(x=>(x.firstName+' '+x.lastName).toLowerCase().includes(q));
+  if(cf) s=s.filter(x=>x.classId===cf);
+  return s;
+}
+
+function render() {
+  const students = filteredStudents();
+  const c = document.getElementById('content');
+  if(students.length===0){c.innerHTML=`<div class="empty-state"><div class="empty-icon">🎓</div><div class="empty-title">Оқушы табылмады</div></div>`;return;}
+
+  if(viewMode==='grid') {
+    c.innerHTML = `<div class="student-grid">${students.map(s=>`
+      <div class="student-card magic-card" onclick="showProfile('${s.id}')">
+        ${isAdmin()?`<div style="position:absolute;top:10px;right:10px;display:flex;gap:4px">
+          <button class="btn btn-secondary btn-icon btn-sm" onclick="event.stopPropagation();editStudent('${s.id}')">✏️</button>
+          <button class="btn btn-danger btn-icon btn-sm" onclick="event.stopPropagation();deleteStudent('${s.id}')">🗑️</button>
+        </div>`:''}
+        <div class="avatar avatar-lg" style="margin:0 auto 12px">${getInitials(s.firstName+' '+s.lastName)}</div>
+        <div class="student-name">${s.firstName} ${s.lastName}</div>
+        <div class="student-class"><span class="badge badge-blue">${s.classId}</span></div>
+        <div class="student-achieve">${(s.achievements||[]).join(' ')||'—'}</div>
+      </div>`).join('')}</div>`;
+  } else {
+    c.innerHTML = `<div class="card"><div class="table-wrapper" style="border:none;border-radius:0"><table>
+      <thead><tr><th>Оқушы</th><th>Сынып</th><th>Туған күні</th><th>Ата-анасы</th><th>Байланыс</th><th>Жетістіктер</th><th>Әрекет</th></tr></thead>
+      <tbody>${students.map(s=>`<tr>
+        <td><div style="display:flex;align-items:center;gap:8px">${avatarDiv(s.firstName+' '+s.lastName,'','sm')}<span class="fw-600">${s.firstName} ${s.lastName}</span></div></td>
+        <td><span class="badge badge-blue">${s.classId}</span></td>
+        <td style="color:var(--text3)">${s.birthDate||'—'}</td>
+        <td style="color:var(--text3)">${s.parentName||'—'}</td>
+        <td style="color:var(--text3)">${s.contactPhone||'—'}</td>
+        <td>${(s.achievements||[]).join(' ')||'—'}</td>
+        <td><div style="display:flex;gap:4px">
+          <button class="btn btn-secondary btn-icon btn-sm" onclick="showProfile('${s.id}')">👁️</button>
+          ${isAdmin()?`<button class="btn btn-secondary btn-icon btn-sm" onclick="editStudent('${s.id}')">✏️</button>
+          <button class="btn btn-danger btn-icon btn-sm" onclick="deleteStudent('${s.id}')">🗑️</button>`:''}
+        </div></td>
+      </tr>`).join('')}</tbody>
+    </table></div></div>`;
+  }
+}
+
+function showProfile(id) {
+  const s = demoDB.find('students',id);
+  if(!s) return;
+  const hw = demoDB.get('homework').filter(h=>(h.classIds||[]).includes(s.classId));
+  const done = demoDB.get('homework_completions').filter(c=>c.studentId===id);
+  document.getElementById('profile-content').innerHTML = `
+    <div style="text-align:center;margin-bottom:16px">
+      <div class="avatar avatar-xl" style="margin:0 auto 12px">${getInitials(s.firstName+' '+s.lastName)}</div>
+      <div style="font-size:20px;font-weight:800">${s.firstName} ${s.lastName}</div>
+      <span class="badge badge-blue" style="margin-top:8px">${s.classId} сынып</span>
+    </div>
+    <div class="divider"></div>
+    <div class="form-grid">
+      <div><div class="text-xs text-muted">Туған күні</div><div class="fw-600">${s.birthDate||'—'}</div></div>
+      <div><div class="text-xs text-muted">Ата-анасы</div><div class="fw-600">${s.parentName||'—'}</div></div>
+      <div><div class="text-xs text-muted">Байланыс</div><div class="fw-600">${s.contactPhone||'—'}</div></div>
+      <div><div class="text-xs text-muted">Жетістіктер</div><div style="font-size:18px">${(s.achievements||[]).join(' ')||'—'}</div></div>
+    </div>
+    <div class="divider"></div>
+    <div class="section-title">📚 Үй тапсырмасы нәтижелері</div>
+    <div style="display:flex;gap:12px;flex-wrap:wrap">
+      <div class="stat-card" style="flex:1;min-width:120px;padding:14px"><div class="stat-value">${hw.length}</div><div class="stat-label">Жалпы тапсырма</div></div>
+      <div class="stat-card" style="flex:1;min-width:120px;padding:14px"><div class="stat-value" style="color:var(--success)">${done.length}</div><div class="stat-label">Орындалған</div></div>
+      <div class="stat-card" style="flex:1;min-width:120px;padding:14px"><div class="stat-value" style="color:var(--error)">${hw.length-done.length}</div><div class="stat-label">Орындалмаған</div></div>
+    </div>`;
+  openModal('profile-modal');
+}
+
+function openAddModal() {
+  document.getElementById('modal-title').textContent = 'Оқушы қосу';
+  document.getElementById('edit-id').value='';
+  document.getElementById('f-first').value='';
+  document.getElementById('f-last').value='';
+  document.getElementById('f-class').value='';
+  document.getElementById('f-birth').value='';
+  document.getElementById('f-parent').value='';
+  document.getElementById('f-contact').value='';
+  document.getElementById('f-pw').value='';
+  document.getElementById('f-achieve').value='';
+  openModal('student-modal');
+}
+
+function editStudent(id) {
+  const s=demoDB.find('students',id); if(!s) return;
+  document.getElementById('modal-title').textContent='Оқушыны өзгерту';
+  document.getElementById('edit-id').value=id;
+  document.getElementById('f-first').value=s.firstName||'';
+  document.getElementById('f-last').value=s.lastName||'';
+  document.getElementById('f-class').value=s.classId||'';
+  document.getElementById('f-birth').value=s.birthDate||'';
+  document.getElementById('f-parent').value=s.parentName||'';
+  document.getElementById('f-contact').value=s.contactPhone||'';
+  document.getElementById('f-pw').value='';
+  document.getElementById('f-achieve').value=(s.achievements||[]).join(' ');
+  openModal('student-modal');
+}
+
+function saveStudent() {
+  const id=document.getElementById('edit-id').value;
+  const firstName=document.getElementById('f-first').value.trim();
+  const lastName=document.getElementById('f-last').value.trim();
+  const classId=document.getElementById('f-class').value;
+  if(!firstName||!lastName){showToast('Аты мен тегін енгізіңіз','error');return;}
+  if(!classId){showToast('Сынып таңдаңыз','error');return;}
+  const btn=document.getElementById('save-btn');
+  setLoading(btn,true);
+  setTimeout(()=>{
+    const pw=document.getElementById('f-pw').value;
+    const phoneVal=document.getElementById('f-contact').value;
+    const nameVal=firstName+' '+lastName;
+    const data={firstName,lastName,classId,birthDate:document.getElementById('f-birth').value,parentName:document.getElementById('f-parent').value,contactPhone:phoneVal,achievements:document.getElementById('f-achieve').value.trim().split(/\s+/).filter(Boolean)};
+    
+    if(id) {
+      demoDB.update('students',id,data);
+      if(pw) {
+        const u=demoDB.find('users',id);
+        if(u) demoDB.update('users',id,{password:pw,phone:phoneVal,name:nameVal});
+        else demoDB.add('users',{id,name:nameVal,phone:phoneVal,password:pw,roles:['student'],isActive:true,createdAt:new Date().toISOString()});
+      }
+    } else {
+      const newId=Date.now().toString(36);
+      demoDB.add('students',{...data,id:newId});
+      if(pw) demoDB.add('users',{id:newId,name:nameVal,phone:phoneVal,password:pw,roles:['student'],isActive:true,createdAt:new Date().toISOString()});
+    }
+
+    setLoading(btn,false);
+    showToast(id?'Сақталды!':'Оқушы қосылды!','success');
+    closeModal('student-modal');
+    render();
+  },600);
+}
+
+function deleteStudent(id) {
+  showConfirm('Оқушыны жою','Бұл әрекетті болдырмау мүмкін емес.',()=>{
+    demoDB.delete('students',id);
+    showToast('Жойылды','success');
+    render();
+  });
+}
+
+render();
+</script>
+</body>
+</html>

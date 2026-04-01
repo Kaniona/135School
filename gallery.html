@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="kk">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>135 Мектеп — Галерея</title>
+<link rel="stylesheet" href="css/main.css">
+<link rel="stylesheet" href="css/animations.css">
+<style>
+.gallery-grid{columns:3 200px;gap:12px}
+.gallery-grid .gallery-item{break-inside:avoid;margin-bottom:12px}
+.gallery-item img{width:100%;display:block;border-radius:var(--radius);object-fit:cover}
+@media(max-width:640px){.gallery-grid{columns:2 140px}}
+</style>
+</head>
+<body>
+<div id="toast-container"></div>
+<div id="app" class="app-layout">
+  <div class="main-content">
+    <header class="page-header">
+      <button class="hamburger-btn btn-ghost" id="hamburger-btn">☰</button>
+      <h1 class="ph-title">🖼️ Галерея</h1>
+      <div class="ph-actions" id="header-act"></div>
+    </header>
+    <div class="page-body page-enter">
+      <div class="search-bar mb-16">
+        <select id="cat-filter" class="form-control" style="width:180px" onchange="render()">
+          <option value="">Барлық санат</option>
+          <option value="Мерекелер">🎊 Мерекелер</option>
+          <option value="Спорт">⚽ Спорт</option>
+          <option value="Оқу">📚 Оқу</option>
+          <option value="Өзге">📷 Өзге</option>
+        </select>
+      </div>
+      <div id="content"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Upload Modal -->
+<div class="modal-overlay" id="gallery-modal">
+  <div class="modal">
+    <div class="modal-header"><div class="modal-title">Сурет жүктеу</div><button class="modal-close" onclick="closeModal('gallery-modal')">✕</button></div>
+    <div class="modal-body">
+      <div class="form-group"><label class="form-label">Суреттер <span class="required">*</span></label>
+        <div class="dropzone" id="gal-zone" onclick="document.getElementById('gal-inp').click()">
+          <div class="dropzone-icon">🖼️</div>
+          <div class="dropzone-text" id="gal-txt">Суреттер таңдаңыз (бірнешеу болуы мүмкін)</div>
+          <div class="dropzone-hint">JPG, PNG форматтары</div>
+        </div>
+        <input id="gal-inp" type="file" accept="image/*" multiple style="display:none" onchange="previewFiles(this)">
+        <div id="gal-preview" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px"></div>
+      </div>
+      <div class="form-group"><label class="form-label">Санат <span class="required">*</span></label>
+        <select id="g-cat" class="form-control">
+          <option value="Мерекелер">🎊 Мерекелер</option>
+          <option value="Спорт">⚽ Спорт</option>
+          <option value="Оқу">📚 Оқу</option>
+          <option value="Өзге">📷 Өзге</option>
+        </select>
+      </div>
+      <div class="form-group"><label class="form-label">Сипаттама</label><input id="g-desc" class="form-control" placeholder="Суреттің сипаттамасы (міндетті емес)"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('gallery-modal')">Бас тарту</button>
+      <button class="btn btn-primary" id="save-gal-btn" onclick="saveGallery()">Жүктеу</button>
+    </div>
+  </div>
+</div>
+
+<!-- Lightbox -->
+<div id="lightbox" class="lightbox-overlay" onclick="closeLightbox()">
+  <button class="lightbox-close" onclick="closeLightbox()">✕</button>
+  <button class="lightbox-nav lightbox-prev" onclick="event.stopPropagation();navLightbox(-1)">‹</button>
+  <img id="lightbox-img" class="lightbox-img" src="" alt="">
+  <button class="lightbox-nav lightbox-next" onclick="event.stopPropagation();navLightbox(1)">›</button>
+  <div style="position:absolute;bottom:20px;color:#fff;font-size:13px;text-align:center;width:100%" id="lightbox-caption"></div>
+</div>
+
+<script src="js/shared.js"></script>
+<script>
+if(!initApp()) throw '';
+injectSidebar(); buildSidebar(); initSidebar();
+if(isAdmin()) document.getElementById('header-act').innerHTML='<button class="btn btn-primary btn-sm" onclick="openModal(\'gallery-modal\')">+ Сурет жүктеу</button>';
+
+let galleryFiles=[], lightboxItems=[], lightboxIndex=0;
+
+function previewFiles(inp){
+  galleryFiles=Array.from(inp.files);
+  const prev=document.getElementById('gal-preview');
+  prev.innerHTML=galleryFiles.map(f=>`<img src="${URL.createObjectURL(f)}" style="width:60px;height:60px;object-fit:cover;border-radius:var(--radius-sm);border:1px solid var(--border)">`).join('');
+  document.getElementById('gal-txt').textContent=`✅ ${galleryFiles.length} сурет таңдалды`;
+}
+
+function render(){
+  let imgs=demoDB.get('gallery');
+  const cf=document.getElementById('cat-filter').value;
+  if(cf) imgs=imgs.filter(i=>i.category===cf);
+  lightboxItems=imgs;
+  const c=document.getElementById('content');
+  if(!imgs.length){c.innerHTML=`<div class="empty-state"><div class="empty-icon">🖼️</div><div class="empty-title">Галерея бос</div>${isAdmin()?`<button class="btn btn-primary" onclick="openModal('gallery-modal')" style="margin-top:12px">+ Сурет жүктеу</button>`:''}</div>`;return;}
+  c.innerHTML=`<div class="gallery-grid">${imgs.map((img,idx)=>`
+    <div class="gallery-item" onclick="openLightbox(${idx})">
+      <img src="${img.imageURL}" alt="${img.description||''}" style="width:100%;border-radius:var(--radius);cursor:pointer;transition:transform .3s" onerror="this.parentNode.innerHTML='<div style=\'height:120px;background:var(--surface2);border-radius:var(--radius);display:flex;align-items:center;justify-content:center;color:var(--text4)\'>🖼️</div>'" onmouseenter="this.style.transform=\'scale(1.02)\'" onmouseleave="this.style.transform=\'\'">
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:4px 2px">
+        <div style="font-size:11px;color:var(--text4)">${img.category||''} • ${formatDate(img.createdAt)}</div>
+        ${isAdmin()?`<button onclick="event.stopPropagation();deleteImg('${img.id}')" style="background:none;border:none;cursor:pointer;font-size:12px;color:var(--error)">🗑️</button>`:''}
+      </div>
+    </div>`).join('')}</div>`;
+}
+
+function openLightbox(idx){
+  lightboxIndex=idx;
+  const lb=document.getElementById('lightbox');
+  lb.classList.add('open');
+  updateLightbox();
+  document.addEventListener('keydown',lbKeyHandler);
+}
+function updateLightbox(){
+  const img=lightboxItems[lightboxIndex];
+  document.getElementById('lightbox-img').src=img?.imageURL||'';
+  document.getElementById('lightbox-caption').textContent=`${img?.description||''} ${img?.category?'• '+img.category:''} • ${lightboxIndex+1}/${lightboxItems.length}`;
+}
+function closeLightbox(){
+  document.getElementById('lightbox').classList.remove('open');
+  document.removeEventListener('keydown',lbKeyHandler);
+}
+function navLightbox(dir){
+  lightboxIndex=(lightboxIndex+dir+lightboxItems.length)%lightboxItems.length;
+  updateLightbox();
+}
+function lbKeyHandler(e){
+  if(e.key==='ArrowLeft') navLightbox(-1);
+  else if(e.key==='ArrowRight') navLightbox(1);
+  else if(e.key==='Escape') closeLightbox();
+}
+
+function saveGallery(){
+  if(!galleryFiles.length){showToast('Суреттер таңдаңыз','error');return;}
+  const category=document.getElementById('g-cat').value;
+  const desc=document.getElementById('g-desc').value;
+  const btn=document.getElementById('save-gal-btn');
+  setLoading(btn,true);
+  setTimeout(()=>{
+    galleryFiles.forEach(f=>{
+      demoDB.add('gallery',{imageURL:URL.createObjectURL(f),category,description:desc,uploadedBy:currentUser.id,fileName:f.name});
+    });
+    setLoading(btn,false);
+    showToast(`${galleryFiles.length} сурет жүктелді!`,'success');
+    galleryFiles=[];
+    document.getElementById('gal-preview').innerHTML='';
+    document.getElementById('gal-txt').textContent='Суреттер таңдаңыз';
+    closeModal('gallery-modal');
+    render();
+  },800);
+}
+
+function deleteImg(id){showConfirm('Суретті жою','',()=>{demoDB.delete('gallery',id);showToast('Жойылды','success');render();});}
+render();
+</script>
+</body>
+</html>

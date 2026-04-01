@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="kk">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>135 Мектеп — Үй тапсырмасы</title>
+<link rel="stylesheet" href="css/main.css">
+<link rel="stylesheet" href="css/animations.css">
+<style>
+.hw-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px}
+.hw-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px;transition:var(--transition);display:flex;flex-direction:column;gap:10px;border-left:3px solid var(--border)}
+.hw-card.ok{border-left-color:var(--success);background:rgba(16,185,129,.04)}
+.hw-card.near{border-left-color:var(--warning)}
+.hw-card.late{border-left-color:var(--error);background:rgba(239,68,68,.04)}
+.hw-card:hover{box-shadow:var(--shadow)}
+.hw-header{display:flex;align-items:flex-start;justify-content:space-between;gap:8px}
+.hw-title{font-weight:700;font-size:14px}
+.hw-desc{font-size:13px;color:var(--text3);line-height:1.5}
+.hw-footer{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px}
+.hw-meta{font-size:11px;color:var(--text4);display:flex;align-items:center;gap:6px}
+</style>
+</head>
+<body>
+<div id="toast-container"></div>
+<div id="app" class="app-layout">
+  <div class="main-content">
+    <header class="page-header">
+      <button class="hamburger-btn btn-ghost" id="hamburger-btn">☰</button>
+      <h1 class="ph-title">📚 Үй тапсырмасы</h1>
+      <div class="ph-actions" id="header-actions"></div>
+    </header>
+    <div class="page-body page-enter">
+      <div class="search-bar mb-16">
+        <div class="search-input-wrapper"><span class="icon">🔍</span><input id="search-inp" class="form-control" placeholder="Тақырып немесе пән..." oninput="render()"></div>
+        <select id="subj-filter" class="form-control" style="width:160px" onchange="render()">
+          <option value="">Барлық пән</option>
+        </select>
+        <select id="status-filter" class="form-control" style="width:150px" onchange="render()" id="status-filter">
+          <option value="">Барлық күй</option>
+          <option value="pending">Орындалмаған</option>
+          <option value="done">Орындалған</option>
+        </select>
+      </div>
+      <div id="content"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Add Modal -->
+<div class="modal-overlay" id="hw-modal">
+  <div class="modal modal-lg">
+    <div class="modal-header"><div class="modal-title" id="modal-title">Тапсырма беру</div><button class="modal-close" onclick="closeModal('hw-modal')">✕</button></div>
+    <div class="modal-body">
+      <input type="hidden" id="edit-id">
+      <div class="form-grid">
+        <div class="form-group"><label class="form-label">Пән <span class="required">*</span></label>
+          <select id="f-subj" class="form-control"><option value="">Таңдаңыз</option></select>
+        </div>
+        <div class="form-group"><label class="form-label">Тақырып <span class="required">*</span></label>
+          <input id="f-title" class="form-control" placeholder="Тапсырма тақырыбы">
+        </div>
+      </div>
+      <div class="form-group"><label class="form-label">Сынып(тар) <span class="required">*</span></label>
+        <div id="class-checks" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:4px"></div>
+      </div>
+      <div class="form-group"><label class="form-label">Сипаттама</label>
+        <textarea id="f-desc" class="form-control" placeholder="Тапсырма мазмұны..."></textarea>
+      </div>
+      <div class="form-grid">
+        <div class="form-group"><label class="form-label">Дедлайн <span class="required">*</span></label>
+          <input id="f-deadline" class="form-control" type="datetime-local">
+        </div>
+        <div class="form-group"><label class="form-label">Файл қосу</label>
+          <div class="dropzone" id="hw-dropzone" onclick="document.getElementById('hw-file-inp').click()">
+            <div class="dropzone-icon">📎</div>
+            <div class="dropzone-text" id="dropzone-text">Файл таңдаңыз</div>
+            <div class="dropzone-hint">PDF, DOC, JPG, PNG</div>
+          </div>
+          <input id="hw-file-inp" type="file" accept=".pdf,.doc,.docx,.jpg,.png" style="display:none" onchange="handleFile(this)">
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('hw-modal')">Бас тарту</button>
+      <button class="btn btn-primary" id="save-btn" onclick="saveHW()">Жариялау</button>
+    </div>
+  </div>
+</div>
+
+<script src="js/shared.js"></script>
+<script>
+if(!initApp()) throw '';
+injectSidebar(); buildSidebar(); initSidebar();
+
+const isSt = isStudent();
+const canAdd = canTeach();
+
+if(canAdd) document.getElementById('header-actions').innerHTML='<button class="btn btn-primary btn-sm" onclick="openAddModal()">+ Тапсырма беру</button>';
+
+// Populate filters
+const sf=document.getElementById('subj-filter');
+SUBJECTS.forEach(s=>sf.innerHTML+=`<option value="${s}">${s}</option>`);
+const fs=document.getElementById('f-subj');
+SUBJECTS.forEach(s=>fs.innerHTML+=`<option value="${s}">${s}</option>`);
+// Class checkboxes
+document.getElementById('class-checks').innerHTML=CLASSES.map(c=>`
+  <label style="display:flex;align-items:center;gap:4px;cursor:pointer;padding:5px 10px;background:var(--bg2);border-radius:var(--radius-sm);border:1px solid var(--border);font-size:12px">
+    <input type="checkbox" data-class="${c}" style="accent-color:var(--primary)">${c}</label>`).join('');
+
+let fileObj=null;
+function handleFile(inp){
+  fileObj=inp.files[0];
+  if(fileObj) document.getElementById('dropzone-text').textContent='📎 '+fileObj.name;
+}
+
+function getCompletions(){return demoDB.get('homework_completions').filter(c=>c.studentId===currentUser.id);}
+
+function filteredHW(){
+  let hw=demoDB.get('homework');
+  const q=document.getElementById('search-inp').value.toLowerCase();
+  const sf2=document.getElementById('subj-filter').value;
+  const st=document.getElementById('status-filter').value;
+  if(isSt && currentUser.classId) hw=hw.filter(h=>(h.classIds||[]).includes(currentUser.classId));
+  if(q) hw=hw.filter(h=>(h.title||'').toLowerCase().includes(q)||(h.subject||'').toLowerCase().includes(q));
+  if(sf2) hw=hw.filter(h=>h.subject===sf2);
+  if(st==='done'){const done=getCompletions().map(c=>c.homeworkId); hw=hw.filter(h=>done.includes(h.id));}
+  if(st==='pending'){const done=getCompletions().map(c=>c.homeworkId); hw=hw.filter(h=>!done.includes(h.id));}
+  return hw;
+}
+
+function render(){
+  const hw=filteredHW();
+  const completions=getCompletions();
+  const doneIds=completions.map(c=>c.homeworkId);
+  const c=document.getElementById('content');
+  if(!hw.length){c.innerHTML=`<div class="empty-state"><div class="empty-icon">📚</div><div class="empty-title">Тапсырма табылмады</div></div>`;return;}
+  c.innerHTML=`<div class="hw-grid">${hw.map(h=>{
+    const d=daysUntil(h.deadline);
+    const done=doneIds.includes(h.id);
+    const cls=done?'ok':d<0?'late':d<=1?'near':'';
+    return `<div class="hw-card ${cls}">
+      <div class="hw-header">
+        <div>
+          <div class="hw-subject" style="display:inline-flex;align-items:center;padding:2px 10px;border-radius:99px;font-size:11px;font-weight:700;background:rgba(37,99,235,.15);color:#60A5FA;margin-bottom:6px">${h.subject}</div>
+          <div class="hw-title">${h.title}</div>
+        </div>
+        ${done?`<span class="badge badge-green">✓ Орындалды</span>`:d<0?`<span class="badge badge-red">⚠️ Өтті</span>`:''}
+      </div>
+      ${h.description?`<div class="hw-desc">${h.description}</div>`:''}
+      <div class="hw-footer">
+        <div class="hw-meta">
+          📅 <span class="${d<0?'text-error':d<=1?'text-warning':''}">${d<0?'Дедлайн өтті':'Дедлайн: '+formatDate(h.deadline)}</span>
+          ${d>=0&&!done?`• <span class="${d<=1?'text-warning':''}">${d===0?'Бүгін!':d===1?'Ертең!':d+' күн'}</span>`:''}
+        </div>
+        <div style="display:flex;gap:6px">
+          ${h.fileURL?`<a href="${h.fileURL}" target="_blank" class="btn btn-secondary btn-sm">📎 Файл</a>`:''}
+          ${isSt&&!done?`<button class="btn btn-success btn-sm" onclick="markDone('${h.id}')">✓ Орындадым</button>`:''}
+          ${!isSt&&canAdd?`<button class="btn btn-danger btn-icon btn-sm" onclick="deleteHW('${h.id}')">🗑️</button>`:''}
+        </div>
+      </div>
+      <div class="hw-meta">👤 Сынып(тар): ${(h.classIds||[]).join(', ')}</div>
+    </div>`;
+  }).join('')}</div>`;
+}
+
+function markDone(id){
+  demoDB.add('homework_completions',{homeworkId:id,studentId:currentUser.id,completedAt:new Date().toISOString()});
+  showToast('✅ Орындалды деп белгіленді!','success');
+  render();
+}
+
+function openAddModal(){
+  document.getElementById('modal-title').textContent='Тапсырма беру';
+  document.getElementById('edit-id').value='';
+  document.getElementById('f-subj').value='';
+  document.getElementById('f-title').value='';
+  document.getElementById('f-desc').value='';
+  document.getElementById('f-deadline').value='';
+  document.getElementById('dropzone-text').textContent='Файл таңдаңыз';
+  fileObj=null;
+  openModal('hw-modal');
+}
+
+function getSelectedClasses(){return Array.from(document.querySelectorAll('#class-checks input:checked')).map(i=>i.dataset.class);}
+
+function saveHW(){
+  const subject=document.getElementById('f-subj').value;
+  const title=document.getElementById('f-title').value.trim();
+  const classIds=getSelectedClasses();
+  const deadline=document.getElementById('f-deadline').value;
+  if(!subject){showToast('Пән таңдаңыз','error');return;}
+  if(!title){showToast('Тақырып енгізіңіз','error');return;}
+  if(!classIds.length){showToast('Кем дегенде бір сынып таңдаңыз','error');return;}
+  if(!deadline){showToast('Дедлайн таңдаңыз','error');return;}
+  const btn=document.getElementById('save-btn');
+  setLoading(btn,true);
+  setTimeout(()=>{
+    const item={subject,title,description:document.getElementById('f-desc').value,teacherId:currentUser.id,classIds,deadline:new Date(deadline).toISOString(),fileURL:fileObj?URL.createObjectURL(fileObj):'',fileName:fileObj?.name||''};
+    demoDB.add('homework',item);
+    setLoading(btn,false);
+    showToast('Тапсырма жарияланды!','success');
+    closeModal('hw-modal');
+    render();
+  },600);
+}
+
+function deleteHW(id){showConfirm('Тапсырманы жою','',()=>{demoDB.delete('homework',id);showToast('Жойылды','success');render();});}
+
+render();
+</script>
+</body>
+</html>

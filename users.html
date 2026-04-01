@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="kk">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>135 Мектеп — Пайдаланушылар</title>
+<link rel="stylesheet" href="css/main.css">
+<link rel="stylesheet" href="css/animations.css">
+</head>
+<body>
+<div id="toast-container"></div>
+<div id="app" class="app-layout">
+  <div class="main-content">
+    <header class="page-header">
+      <button class="hamburger-btn btn-ghost" id="hamburger-btn">☰</button>
+      <h1 class="ph-title">👥 Пайдаланушылар</h1>
+      <div class="ph-actions">
+        <button class="btn btn-primary btn-sm" onclick="openAddModal()">+ Қосу</button>
+      </div>
+    </header>
+    <div class="page-body page-enter">
+      <!-- Search -->
+      <div class="search-bar mb-16">
+        <div class="search-input-wrapper"><span class="icon">🔍</span><input id="search-inp" class="form-control" placeholder="Аты немесе телефон бойынша іздеу..." oninput="renderTable()"></div>
+        <select id="role-filter" class="form-control" style="width:180px" onchange="renderTable()">
+          <option value="">Барлық рөлдер</option>
+          <option value="super_admin">Бас Әкімші</option>
+          <option value="admin">Әкімші</option>
+          <option value="director">Директор</option>
+          <option value="deputy_director">Орынбасар</option>
+          <option value="class_teacher">Сынып жетекші</option>
+          <option value="teacher">Мұғалім</option>
+          <option value="student">Оқушы</option>
+        </select>
+      </div>
+      <!-- Table -->
+      <div class="card">
+        <div class="table-wrapper" style="border:none;border-radius:0">
+          <table><thead><tr><th>Пайдаланушы</th><th>Телефон</th><th>Рөлдері</th><th>Күйі</th><th>Тіркелген</th><th>Әрекет</th></tr></thead>
+          <tbody id="users-table-body"></tbody></table>
+        </div>
+        <div id="pagination" class="pagination"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Add/Edit Modal -->
+<div class="modal-overlay" id="user-modal">
+  <div class="modal">
+    <div class="modal-header"><div class="modal-title" id="modal-title">Пайдаланушы қосу</div><button class="modal-close" onclick="closeModal('user-modal')">✕</button></div>
+    <div class="modal-body">
+      <input type="hidden" id="edit-id">
+      <div class="form-grid">
+        <div class="form-group"><label class="form-label">Аты-жөні <span class="required">*</span></label><input id="f-name" class="form-control" placeholder="Аты-жөні"></div>
+        <div class="form-group"><label class="form-label">Телефон <span class="required">*</span></label><input id="f-phone" class="form-control" placeholder="+77001234567"></div>
+      </div>
+      <div class="form-group"><label class="form-label">Пароль</label><input id="f-pw" class="form-control" type="password" placeholder="Жаңа пайдаланушыда міндетті"></div>
+      <div class="form-group">
+        <label class="form-label">Рөлдері <span class="required">*</span></label>
+        <div id="role-checkboxes" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:4px"></div>
+      </div>
+      <div class="form-group"><div class="toggle-wrapper"><button class="toggle" id="active-toggle" onclick="this.classList.toggle('on')"></button><span class="toggle-label">Белсенді</span></div></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('user-modal')">Бас тарту</button>
+      <button class="btn btn-primary" id="save-btn" onclick="saveUser()">Сақтау</button>
+    </div>
+  </div>
+</div>
+
+<script src="js/shared.js"></script>
+<script>
+if(!initApp()) throw '';
+if(!hasAnyRole(['super_admin','admin'])) { location.href='dashboard.html'; throw ''; }
+injectSidebar(); buildSidebar(); initSidebar();
+
+const ROLE_LIST = ['super_admin','admin','director','deputy_director','class_teacher','teacher','student'];
+let page = 1, perPage = 20;
+
+function filteredUsers() {
+  let users = demoDB.get('users');
+  const q = document.getElementById('search-inp')?.value.toLowerCase() || '';
+  const rf = document.getElementById('role-filter')?.value || '';
+  if(q) users = users.filter(u=>(u.name||'').toLowerCase().includes(q)||(u.phone||'').includes(q));
+  if(rf) users = users.filter(u=>(u.roles||[]).includes(rf));
+  return users;
+}
+
+function renderTable() {
+  const users = filteredUsers();
+  const total = users.length;
+  const pages = Math.ceil(total/perPage);
+  if(page>pages && pages>0) page=pages;
+  const slice = users.slice((page-1)*perPage, page*perPage);
+  const tbody = document.getElementById('users-table-body');
+  if(!tbody) return;
+  if(slice.length===0) { tbody.innerHTML=`<tr><td colspan="6"><div class="empty-state"><div class="empty-icon">👤</div><div class="empty-title">Пайдаланушы табылмады</div></div></td></tr>`; }
+  else {
+    tbody.innerHTML = slice.map(u=>`<tr>
+      <td><div style="display:flex;align-items:center;gap:10px">${avatarDiv(u.name,u.photoURL,'sm')}<span class="fw-600">${u.name||'—'}</span></div></td>
+      <td style="color:var(--text3)">${u.phone||'—'}</td>
+      <td>${(u.roles||[]).map(roleBadge).join(' ')}</td>
+      <td><span class="badge ${u.isActive!==false?'badge-green':'badge-red'}">${u.isActive!==false?'Белсенді':'Белсенді емес'}</span></td>
+      <td style="color:var(--text3);font-size:12px">${formatDate(u.createdAt)||'—'}</td>
+      <td><div style="display:flex;gap:6px">
+        <button class="btn btn-secondary btn-icon btn-sm" title="Өзгерту" onclick='editUser(${JSON.stringify(u.id)})'>✏️</button>
+        ${hasRole('super_admin')?`<button class="btn btn-danger btn-icon btn-sm" title="Өшіру" onclick='deleteUser("${u.id}")'>🗑️</button>`:''}
+      </div></td>
+    </tr>`).join('');
+  }
+  // Pagination
+  const pag = document.getElementById('pagination');
+  let ph='';
+  if(pages>1) {
+    ph += `<button class="page-btn" onclick="gotoPage(${page-1})" ${page===1?'disabled':''}>‹</button>`;
+    for(let i=1;i<=pages;i++) ph += `<button class="page-btn ${i===page?'active':''}" onclick="gotoPage(${i})">${i}</button>`;
+    ph += `<button class="page-btn" onclick="gotoPage(${page+1})" ${page===pages?'disabled':''}>›</button>`;
+  }
+  pag.innerHTML = ph;
+}
+function gotoPage(p){page=p;renderTable();}
+
+function openAddModal() {
+  document.getElementById('modal-title').textContent='Пайдаланушы қосу';
+  document.getElementById('edit-id').value='';
+  document.getElementById('f-name').value='';
+  document.getElementById('f-phone').value='';
+  document.getElementById('f-pw').value='';
+  document.getElementById('active-toggle').classList.add('on');
+  buildRoleCheckboxes([]);
+  openModal('user-modal');
+}
+
+function editUser(id) {
+  const u = demoDB.find('users',id);
+  if(!u) return;
+  document.getElementById('modal-title').textContent='Өзгерту';
+  document.getElementById('edit-id').value=id;
+  document.getElementById('f-name').value=u.name||'';
+  document.getElementById('f-phone').value=u.phone||'';
+  document.getElementById('f-pw').value='';
+  if(u.isActive!==false) document.getElementById('active-toggle').classList.add('on');
+  else document.getElementById('active-toggle').classList.remove('on');
+  buildRoleCheckboxes(u.roles||[]);
+  openModal('user-modal');
+}
+
+function buildRoleCheckboxes(selected) {
+  const wrap = document.getElementById('role-checkboxes');
+  wrap.innerHTML = ROLE_LIST.map(r=>`
+    <label style="display:flex;align-items:center;gap:6px;cursor:pointer;padding:8px 12px;background:var(--bg2);border-radius:var(--radius-sm);border:1px solid var(--border);transition:var(--transition);font-size:12px" onmouseenter="this.style.borderColor='var(--primary)'" onmouseleave="this.style.borderColor=''">
+      <input type="checkbox" data-role="${r}" ${selected.includes(r)?'checked':''} style="accent-color:var(--primary)">
+      ${ROLE_LABELS[r]||r}
+    </label>`).join('');
+}
+
+function getSelectedRoles() {
+  return Array.from(document.querySelectorAll('#role-checkboxes input[type=checkbox]:checked')).map(i=>i.dataset.role);
+}
+
+function saveUser() {
+  const id = document.getElementById('edit-id').value;
+  const name = document.getElementById('f-name').value.trim();
+  const phone = document.getElementById('f-phone').value.trim();
+  const pw = document.getElementById('f-pw').value;
+  const roles = getSelectedRoles();
+  const isActive = document.getElementById('active-toggle').classList.contains('on');
+  if(!name){showToast('Аты-жөнін енгізіңіз','error');return;}
+  if(!phone){showToast('Телефон енгізіңіз','error');return;}
+  if(!id && !pw){showToast('Жаңа пайдаланушыға пароль міндетті','error');return;}
+  if(roles.length===0){showToast('Кем дегенде бір рөл таңдаңыз','error');return;}
+  const btn=document.getElementById('save-btn');
+  setLoading(btn,true);
+  setTimeout(()=>{
+    if(id) {
+      const upd={name,phone,roles,isActive};
+      if(pw) upd.password=pw;
+      demoDB.update('users',id,upd);
+      showToast('Сақталды!','success');
+    } else {
+      demoDB.add('users',{id:Date.now().toString(36),name,phone,password:pw,roles,isActive,createdAt:new Date().toISOString()});
+      showToast('Пайдаланушы қосылды!','success');
+    }
+    setLoading(btn,false);
+    closeModal('user-modal');
+    renderTable();
+  },600);
+}
+
+function deleteUser(id) {
+  showConfirm('Жоюды растаңыз','Пайдаланушы жойылады. Бұл әрекетті болдырмау мүмкін емес.',()=>{
+    demoDB.delete('users',id);
+    showToast('Жойылды','success');
+    renderTable();
+  });
+}
+
+renderTable();
+</script>
+</body>
+</html>

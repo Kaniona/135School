@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="kk">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>135 Мектеп — Жүйеге кіру</title>
+  <link rel="stylesheet" href="css/main.css">
+  <link rel="stylesheet" href="css/animations.css">
+  <style>
+    body { display:flex; align-items:center; justify-content:center; min-height:100vh; background:var(--bg); position:relative; overflow:hidden; }
+    .bg-orbs { position:fixed; inset:0; pointer-events:none; z-index:0; }
+    .orb { position:absolute; border-radius:50%; filter:blur(80px); opacity:0.15; }
+    .orb1 { width:500px;height:500px;background:radial-gradient(circle,#2563EB,transparent);top:-100px;left:-100px;animation:float 8s ease-in-out infinite; }
+    .orb2 { width:400px;height:400px;background:radial-gradient(circle,#8B5CF6,transparent);bottom:-80px;right:-80px;animation:float 10s ease-in-out infinite reverse; }
+    .orb3 { width:300px;height:300px;background:radial-gradient(circle,#14B8A6,transparent);top:50%;left:50%;transform:translate(-50%,-50%);animation:float 12s ease-in-out infinite; }
+    .login-wrap { position:relative;z-index:1;width:100%;max-width:420px;padding:20px; }
+    .login-card { background:var(--surface);border:1px solid var(--border);border-radius:24px;padding:40px;box-shadow:var(--shadow-lg);animation:fadeSlideIn .5s ease; }
+    .login-logo { display:flex;flex-direction:column;align-items:center;gap:12px;margin-bottom:32px; }
+    .logo-img { width:80px;height:80px;border-radius:50%;object-fit:cover;border:3px solid var(--primary);box-shadow:0 0 30px rgba(37,99,235,.5); }
+    .logo-placeholder { width:80px;height:80px;border-radius:50%;background:linear-gradient(135deg,#2563EB,#8B5CF6);display:flex;align-items:center;justify-content:center;font-size:32px;font-weight:900;color:#fff;border:3px solid rgba(37,99,235,.5);box-shadow:0 0 30px rgba(37,99,235,.4); }
+    .logo-school-name { font-size:22px;font-weight:800;color:var(--text);text-align:center;letter-spacing:-0.5px; }
+    .logo-school-sub { font-size:12px;color:var(--text3);text-align:center; }
+    .login-title { font-size:24px;font-weight:800;color:var(--text);text-align:center;margin-bottom:6px; }
+    .login-sub { font-size:13px;color:var(--text3);text-align:center;margin-bottom:28px; }
+    .pw-wrapper { position:relative; }
+    .pw-toggle { position:absolute;right:14px;top:50%;transform:translateY(-50%);cursor:pointer;font-size:18px;color:var(--text4);background:none;border:none;padding:4px;line-height:1; }
+    .pw-wrapper .form-control { padding-right:44px; }
+    .login-btn { width:100%;margin-top:8px;font-size:15px;font-weight:700;min-height:48px;border-radius:var(--radius-sm); background:linear-gradient(135deg,#2563EB,#1D4ED8); box-shadow:0 4px 20px rgba(37,99,235,.4); }
+    .login-btn:hover { transform:translateY(-2px);box-shadow:0 6px 28px rgba(37,99,235,.6); }
+    .demo-info { margin-top:20px;padding:14px;background:rgba(37,99,235,.08);border:1px solid rgba(37,99,235,.2);border-radius:var(--radius-sm);font-size:12px;color:var(--text3); }
+    .demo-info strong { color:var(--primary-light);display:block;margin-bottom:4px; }
+    .demo-creds div { margin-top:4px;font-family:monospace; }
+    .input-wrapper { position:relative; }
+    .input-prefix { position:absolute;left:14px;top:50%;transform:translateY(-50%);color:var(--text3);font-size:13px;pointer-events:none; }
+    .phone-input { padding-left:28px; }
+    .error-msg { color:var(--error);font-size:12px;margin-top:4px;display:none; }
+    .error-msg.show { display:block;animation:slideUp .2s ease; }
+    .form-control.error { border-color:var(--error);animation:shake .3s ease; }
+    @keyframes shake { 0%,100%{transform:translateX(0)} 25%{transform:translateX(-6px)} 75%{transform:translateX(6px)} }
+    .dots { display:flex;gap:6px;justify-content:center;margin-top:24px; }
+    .dot { width:6px;height:6px;border-radius:50%;background:var(--border); }
+    .dot.active { background:var(--primary);width:18px; }
+  </style>
+</head>
+<body>
+<div class="bg-orbs">
+  <div class="orb orb1"></div>
+  <div class="orb orb2"></div>
+  <div class="orb orb3"></div>
+</div>
+<div id="toast-container"></div>
+
+<div class="login-wrap">
+  <div class="login-card">
+    <div class="login-logo">
+      <div class="logo-placeholder" id="logo-img">135</div>
+      <div>
+        <div class="logo-school-name">135 Мектеп</div>
+        <div class="logo-school-sub">Ақпараттық басқару жүйесі</div>
+      </div>
+    </div>
+
+    <h1 class="login-title">Жүйеге кіру</h1>
+    <p class="login-sub">Деректеріңізді енгізіңіз</p>
+
+    <form id="login-form">
+      <div class="form-group" style="margin-bottom:16px">
+        <label class="form-label">Телефон немесе логин <span class="required">*</span></label>
+        <div class="input-wrapper">
+          <input id="phone-input" class="form-control" type="text" placeholder="+7 (000) 000-00-00 немесе логин" autocomplete="username" required>
+        </div>
+        <div class="error-msg" id="phone-error">Телефон немесе логин енгізіңіз</div>
+      </div>
+
+      <div class="form-group" style="margin-bottom:24px">
+        <label class="form-label">Пароль <span class="required">*</span></label>
+        <div class="pw-wrapper">
+          <input id="pw-input" class="form-control" type="password" placeholder="••••••••" autocomplete="current-password" required>
+          <button type="button" class="pw-toggle" id="pw-toggle">👁️</button>
+        </div>
+        <div class="error-msg" id="pw-error">Пароль енгізіңіз</div>
+      </div>
+
+      <button type="submit" class="btn btn-primary login-btn ripple-btn" id="login-btn">
+        Кіру
+      </button>
+    </form>
+
+    <div class="demo-info">
+      <strong>🎯 Демо режим — кіру деректері:</strong>
+      <div class="demo-creds">
+        <div>📱 <b>87713399824</b> | 🔑 <b>02110166n135MektepAdminNurtore09</b> (Бас Әкімші)</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// Simple demo login (no Firebase needed)
+const DEMO_USERS_LOGIN = {
+  "87713399824": { id:"admin001", name:"Нұртөре", roles:["super_admin"], password:"02110166n135MektepAdminNurtore09" },
+  "+787713399824": { id:"admin001", name:"Нұртөре", roles:["super_admin"], password:"02110166n135MektepAdminNurtore09" }
+};
+
+// Check already logged in
+if (localStorage.getItem('demoSession')) {
+  window.location.href = 'dashboard.html';
+}
+
+function toast(msg, type='error') {
+  const c = document.getElementById('toast-container');
+  const icons = {success:'✅',error:'❌',warning:'⚠️',info:'ℹ️'};
+  const t = document.createElement('div');
+  t.className = `toast toast-${type}`;
+  t.innerHTML = `<span class="toast-icon">${icons[type]||'ℹ️'}</span><span>${msg}</span>`;
+  c.appendChild(t);
+  setTimeout(()=>{ t.style.animation='toast-out .3s ease forwards'; setTimeout(()=>t.remove(),350); },3500);
+}
+
+document.getElementById('pw-toggle').onclick = function() {
+  const inp = document.getElementById('pw-input');
+  if (inp.type==='password') { inp.type='text'; this.textContent='🙈'; }
+  else { inp.type='password'; this.textContent='👁️'; }
+};
+
+document.getElementById('login-form').onsubmit = async function(e) {
+  e.preventDefault();
+  const phone = document.getElementById('phone-input').value.trim().replace(/\s|-|\(|\)/g,'');
+  const pw = document.getElementById('pw-input').value;
+  const btn = document.getElementById('login-btn');
+
+  // Clear errors
+  document.querySelectorAll('.error-msg').forEach(el=>el.classList.remove('show'));
+  document.querySelectorAll('.form-control').forEach(el=>el.classList.remove('error'));
+
+  if (!phone) {
+    document.getElementById('phone-error').classList.add('show');
+    document.getElementById('phone-input').classList.add('error');
+    return;
+  }
+  if (!pw) {
+    document.getElementById('pw-error').classList.add('show');
+    document.getElementById('pw-input').classList.add('error');
+    return;
+  }
+
+  btn.disabled = true;
+  btn.innerHTML = '<span class="loader loader-sm" style="border-top-color:#fff;width:20px;height:20px;border-width:2px;border-color:rgba(255,255,255,0.3);border-top-color:#fff;border-radius:50%;animation:spin .7s linear infinite;display:inline-block;"></span>';
+
+  await new Promise(r => setTimeout(r, 800));
+
+  // Seed DB if needed
+  if (!localStorage.getItem('db_seeded_v3')) {
+    seedDB();
+  }
+
+  // Check users in localStorage first
+  const dbUsers = JSON.parse(localStorage.getItem('db_users') || '[]');
+  const cleanedPhone = phone.replace(/^\+7|^8/,'');
+  let user = dbUsers.find(u => u.phone === phone || u.phone === '+7'+cleanedPhone || u.phone === '8'+cleanedPhone);
+  
+  // Fallback to DEMO_USERS_LOGIN
+  if (!user) {
+    user = DEMO_USERS_LOGIN[phone] || DEMO_USERS_LOGIN['+7'+cleanedPhone];
+  }
+
+  if (!user || user.password !== pw || user.isActive === false) {
+    btn.disabled = false;
+    btn.innerHTML = 'Кіру';
+    document.getElementById('phone-input').classList.add('error');
+    document.getElementById('pw-input').classList.add('error');
+    toast('Телефон немесе пароль қате немесе бұғатталған!', 'error');
+    return;
+  }
+
+  // Save session
+  localStorage.setItem('demoSession', JSON.stringify(user));
+
+  toast('Жүйеге кірдіңіз!', 'success');
+  setTimeout(() => { window.location.href = 'dashboard.html'; }, 800);
+};
+
+function seedDB() {
+  const users = Object.entries(DEMO_USERS_LOGIN).map(([phone, u]) => ({...u, phone, isActive:true, createdAt: new Date().toISOString()}));
+  // Add super admin, clear everything else
+  localStorage.setItem('db_users', JSON.stringify(users));
+  localStorage.setItem('db_students', JSON.stringify([]));
+  localStorage.setItem('db_teachers', JSON.stringify([]));
+  localStorage.setItem('db_news', JSON.stringify([]));
+  localStorage.setItem('db_events', JSON.stringify([]));
+  localStorage.setItem('db_homework', JSON.stringify([]));
+  
+  const tests = [
+    {id:'t_math1',title:'Математикалық логика',subject:'Математика',classIds:['10','11'],teacherId:'admin001',timeLimit:20,isActive:true,createdAt:new Date().toISOString(),
+      questions:[
+        {id:'q1',text:'Келесі санды табыңыз: 2, 6, 12, 20, 30, ?',options:['40','42','44','46'],correct:1,score:2},
+        {id:'q2',text:'Егер 5 жұмысшы 5 үйді 5 күнде салса, 100 жұмысшы 100 үйді неше күнде салады?',options:['5','100','50','20'],correct:0,score:2},
+        {id:'q3',text:'x² - 5x + 6 = 0 теңдеуінің түбірлерінің қосындысы неге тең?',options:['5','-5','6','-6'],correct:0,score:1}
+      ]},
+    {id:'t_hist1',title:'Қазақстан тарихы ҰБТ',subject:'Тарих',classIds:['11'],teacherId:'admin001',timeLimit:30,isActive:true,createdAt:new Date().toISOString(),
+      questions:[
+        {id:'q1',text:'Қазақ хандығының негізін қалаған хандар:',options:['Керей мен Жәнібек','Қасым мен Хақназар','Абылай мен Әбілқайыр','Тәуке мен Есім'],correct:0,score:1},
+        {id:'q2',text:'Аң стилі қай дәуірге тән?',options:['Энеолит','Қола дәуірі','Ерте темір дәуірі','Орта ғасырлар'],correct:2,score:1},
+        {id:'q3',text:'Орбұлақ шайқасы қай жылы болды?',options:['1643','1729','1726','1652'],correct:0,score:1}
+      ]},
+    {id:'t_it1',title:'Информатика негіздері',subject:'Информатика',classIds:['9','10'],teacherId:'admin001',timeLimit:15,isActive:true,createdAt:new Date().toISOString(),
+      questions:[
+        {id:'q1',text:'Екілік санау жүйесіндегі 1010 саны ондық жүйеде:',options:['8','10','12','14'],correct:1,score:1},
+        {id:'q2',text:'RAM дегеніміз не?',options:['Тұрақты жады','Жедел жады','Сыртқы жады','Кэш жады'],correct:1,score:1},
+        {id:'q3',text:'Алгоритмнің қасиеттеріне жатпайтынын көрсетіңіз:',options:['Дискреттілік','Түсініктілік','Нәтижелілік','Уақытшалық'],correct:3,score:1}
+      ]}
+  ];
+  localStorage.setItem('db_tests', JSON.stringify(tests));
+  localStorage.setItem('db_schedule', JSON.stringify([]));
+  localStorage.setItem('db_gallery', JSON.stringify([]));
+  localStorage.setItem('db_files', JSON.stringify([]));
+  localStorage.setItem('db_homework_completions', JSON.stringify([]));
+  localStorage.setItem('db_seeded_v3','1');
+}
+</script>
+</body>
+</html>

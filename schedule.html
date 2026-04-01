@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="kk">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>135 Мектеп — Сабақ кестесі</title>
+<link rel="stylesheet" href="css/main.css">
+<link rel="stylesheet" href="css/animations.css">
+<style>
+.schedule-wrapper{overflow-x:auto}
+.schedule-grid{display:grid;grid-template-columns:70px repeat(5,1fr);min-width:600px;gap:0;border:1px solid var(--border);border-radius:var(--radius);overflow:hidden}
+.sch-cell{padding:6px 8px;min-height:60px;border-right:1px solid var(--border);border-bottom:1px solid var(--border);background:var(--surface);position:relative}
+.sch-cell:last-child,.sch-cell:nth-child(6n){border-right:none}
+.sch-header{background:var(--bg2);font-weight:700;font-size:12px;color:var(--text3);display:flex;align-items:center;justify-content:center;min-height:44px;text-align:center}
+.sch-time{background:var(--bg2);font-size:10px;color:var(--text4);display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;cursor:default;gap:2px}
+.sch-lesson{background:rgba(37,99,235,.1);border:1px solid rgba(37,99,235,.25);border-radius:6px;padding:6px 8px;height:100%;box-sizing:border-box;cursor:pointer;transition:var(--transition)}
+.sch-lesson:hover{background:rgba(37,99,235,.2)}
+.sch-subj{font-size:11px;font-weight:700;color:var(--primary-light);margin-bottom:2px}
+.sch-room{font-size:10px;color:var(--text4)}
+.sch-teach{font-size:10px;color:var(--text3)}
+.sch-empty{width:100%;height:100%;cursor:pointer;transition:background .15s;display:flex;align-items:center;justify-content:center;font-size:18px;color:transparent;border-radius:6px}
+.sch-empty:hover{background:rgba(37,99,235,.07);color:var(--text4)}
+</style>
+</head>
+<body>
+<div id="toast-container"></div>
+<div id="app" class="app-layout">
+  <div class="main-content">
+    <header class="page-header">
+      <button class="hamburger-btn btn-ghost" id="hamburger-btn">☰</button>
+      <h1 class="ph-title">📅 Сабақ кестесі</h1>
+    </header>
+    <div class="page-body page-enter">
+      <div class="search-bar mb-16">
+        <div class="form-group" style="flex:none">
+          <label class="form-label">Сынып</label>
+          <select id="class-sel" class="form-control" onchange="render()"></select>
+        </div>
+        <div style="margin-top:18px;font-size:12px;color:var(--text4)" id="perm-hint"></div>
+      </div>
+      <div class="schedule-wrapper" id="schedule-wrap"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Lesson Edit Modal -->
+<div class="modal-overlay" id="lesson-modal">
+  <div class="modal">
+    <div class="modal-header"><div class="modal-title" id="lesson-modal-title">Сабақ қосу</div><button class="modal-close" onclick="closeModal('lesson-modal')">✕</button></div>
+    <div class="modal-body">
+      <input type="hidden" id="l-class"><input type="hidden" id="l-day"><input type="hidden" id="l-num">
+      <div class="form-group"><label class="form-label">Пән <span class="required">*</span></label>
+        <select id="l-subj" class="form-control"><option value="">Таңдаңыз</option></select>
+      </div>
+      <div class="form-group"><label class="form-label">Мұғалім</label>
+        <select id="l-teacher" class="form-control"><option value="">Таңдаңыз</option></select>
+      </div>
+      <div class="form-group"><label class="form-label">Кабинет</label>
+        <input id="l-room" class="form-control" placeholder="мыс: 205">
+      </div>
+      <div class="form-group"><label class="form-label">Уақыт</label>
+        <div id="l-time-display" class="form-control" style="cursor:default;opacity:.7">—</div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-danger btn-sm" id="clear-btn" onclick="clearLesson()">🗑️ Тазалау</button>
+      <button class="btn btn-secondary" onclick="closeModal('lesson-modal')">Бас тарту</button>
+      <button class="btn btn-primary" id="save-lesson-btn" onclick="saveLesson()">Сақтау</button>
+    </div>
+  </div>
+</div>
+
+<script src="js/shared.js"></script>
+<script>
+if(!initApp()) throw '';
+injectSidebar(); buildSidebar(); initSidebar();
+
+const canEdit = canManageSchedule();
+
+// Populate class selector
+const csel = document.getElementById('class-sel');
+CLASSES.forEach(c=>csel.innerHTML+=`<option value="${c}">${c} сынып</option>`);
+
+// Populate subject dropdown in modal
+const lsubj = document.getElementById('l-subj');
+SUBJECTS.forEach(s=>lsubj.innerHTML+=`<option value="${s}">${s}</option>`);
+
+// Populate teacher dropdown
+const lteach = document.getElementById('l-teacher');
+demoDB.get('teachers').forEach(t=>lteach.innerHTML+=`<option value="${t.id}">${t.name}</option>`);
+
+if(!canEdit) document.getElementById('perm-hint').textContent='👁️ Кестені тек Әкімші, Директор, Орынбасар өзгерте алады';
+
+function render() {
+  const cls = document.getElementById('class-sel').value || CLASSES[0];
+  const schedule = demoDB.get('schedule').filter(s=>s.classId===cls);
+  const wrap = document.getElementById('schedule-wrap');
+  
+  let html = '<div class="schedule-grid">';
+  // Header row
+  html += '<div class="sch-cell sch-header">Сабақ</div>';
+  DAYS.forEach(d=>html+=`<div class="sch-cell sch-header">${d}</div>`);
+  
+  // Lesson rows
+  for(let n=1;n<=8;n++) {
+    const lt = LESSON_TIMES[n-1];
+    html += `<div class="sch-cell sch-time"><div style="font-weight:700;font-size:12px">${n}</div><div>${lt.time.split('-')[0]}</div></div>`;
+    for(let d=1;d<=5;d++) {
+      const lesson = schedule.find(s=>s.dayOfWeek===d && s.lessonNumber===n);
+      if(lesson && lesson.subject) {
+        html += `<div class="sch-cell" ${canEdit?`onclick="openLesson('${cls}',${d},${n})"`:''}>
+          <div class="sch-lesson">
+            <div class="sch-subj">${lesson.subject}</div>
+            ${lesson.room?`<div class="sch-room">📍 Каб. ${lesson.room}</div>`:''}
+            ${lesson.teacherName?`<div class="sch-teach">👤 ${lesson.teacherName}</div>`:''}
+          </div>
+        </div>`;
+      } else {
+        html += `<div class="sch-cell" ${canEdit?`onclick="openLesson('${cls}',${d},${n})"`:''}><div class="sch-empty">${canEdit?'+':''}</div></div>`;
+      }
+    }
+  }
+  html += '</div>';
+  wrap.innerHTML = html;
+}
+
+function openLesson(cls, day, num) {
+  if(!canEdit) return;
+  document.getElementById('l-class').value=cls;
+  document.getElementById('l-day').value=day;
+  document.getElementById('l-num').value=num;
+  const lesson = demoDB.get('schedule').find(s=>s.classId===cls&&s.dayOfWeek===day&&s.lessonNumber===num);
+  document.getElementById('lesson-modal-title').textContent=`${DAYS[day-1]} — ${num}-сабақ`;
+  document.getElementById('l-subj').value=lesson?.subject||'';
+  document.getElementById('l-teacher').value=lesson?.teacherId||'';
+  document.getElementById('l-room').value=lesson?.room||'';
+  document.getElementById('l-time-display').textContent=LESSON_TIMES[num-1].time;
+  openModal('lesson-modal');
+}
+
+function saveLesson() {
+  const cls=document.getElementById('l-class').value;
+  const day=+document.getElementById('l-day').value;
+  const num=+document.getElementById('l-num').value;
+  const subject=document.getElementById('l-subj').value;
+  const teacherId=document.getElementById('l-teacher').value;
+  const teacherName=document.getElementById('l-teacher').options[document.getElementById('l-teacher').selectedIndex]?.text||'';
+  const room=document.getElementById('l-room').value.trim();
+  if(!subject){showToast('Пән таңдаңыз','error');return;}
+  const schedule=demoDB.get('schedule');
+  const idx=schedule.findIndex(s=>s.classId===cls&&s.dayOfWeek===day&&s.lessonNumber===num);
+  const entry={id:`sch_${cls}_${day}_${num}`,classId:cls,dayOfWeek:day,lessonNumber:num,subject,teacherId,teacherName:teacherName==='Таңдаңыз'?'':teacherName,room};
+  if(idx>=0) schedule[idx]=entry; else schedule.push(entry);
+  demoDB.set('schedule',schedule);
+  showToast('Кесте сақталды!','success');
+  closeModal('lesson-modal');
+  render();
+}
+
+function clearLesson(){
+  const cls=document.getElementById('l-class').value;
+  const day=+document.getElementById('l-day').value;
+  const num=+document.getElementById('l-num').value;
+  const schedule=demoDB.get('schedule').filter(s=>!(s.classId===cls&&s.dayOfWeek===day&&s.lessonNumber===num));
+  demoDB.set('schedule',schedule);
+  showToast('Тазаланды','success');
+  closeModal('lesson-modal');
+  render();
+}
+
+render();
+</script>
+</body>
+</html>

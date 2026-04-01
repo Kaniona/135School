@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="kk">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>135 Мектеп — Мұғалімдер рейтингі</title>
+<link rel="stylesheet" href="css/main.css">
+<link rel="stylesheet" href="css/animations.css">
+<style>
+.podium { display:flex; align-items:flex-end; justify-content:center; gap:12px; margin:32px 0; }
+.podium-place { display:flex; flex-direction:column; align-items:center; gap:8px; flex:1; max-width:200px; }
+.podium-rank { font-size:32px; }
+.podium-avatar { position:relative; }
+.podium-crown { position:absolute; top:-20px; left:50%; transform:translateX(-50%); font-size:22px; }
+.podium-name { font-weight:700; font-size:13px; text-align:center; line-height:1.3; }
+.podium-stars { font-size:12px; color:var(--text3); }
+.podium-bar { width:100%; border-radius:var(--radius-sm) var(--radius-sm) 0 0; display:flex; align-items:center; justify-content:center; font-size:28px; font-weight:800; color:rgba(255,255,255,.9); }
+.podium-bar.p1 { height:110px; background:linear-gradient(180deg,#F59E0B,#B45309); }
+.podium-bar.p2 { height:80px; background:linear-gradient(180deg,#94A3B8,#64748B); }
+.podium-bar.p3 { height:60px; background:linear-gradient(180deg,#CD7C2F,#92400E); }
+.rank-table { width:100%; border-collapse:collapse; }
+.rank-table tr { border-bottom:1px solid var(--border); transition:var(--transition); }
+.rank-table tr:hover { background:var(--surface2); }
+.rank-table th { text-align:left; padding:12px 16px; font-size:11px; text-transform:uppercase; letter-spacing:.05em; color:var(--text4); font-weight:600; }
+.rank-table td { padding:12px 16px; }
+.rank-num { font-weight:800; font-size:16px; width:40px; }
+.star-bar { height:8px; background:var(--bg2); border-radius:99px; overflow:hidden; margin-top:4px; }
+.star-bar-fill { height:100%; background:linear-gradient(90deg,#F59E0B,#EF4444); border-radius:99px; transition:width .5s ease; }
+.stars-inline { display:flex; gap:2px; align-items:center; }
+.stars-inline .si { font-size:14px; color:var(--border); }
+.stars-inline .si.f { color:#F59E0B; }
+.filter-tabs { display:flex; gap:8px; flex-wrap:wrap; }
+.filter-tab { padding:6px 14px; border-radius:99px; font-size:12px; font-weight:600; cursor:pointer; border:1px solid var(--border); background:var(--surface); color:var(--text3); transition:var(--transition); }
+.filter-tab.active { background:var(--primary); color:#fff; border-color:var(--primary); }
+.filter-tab:hover { border-color:var(--primary); color:var(--primary); }
+.stat-row { display:flex; gap:16px; flex-wrap:wrap; margin-bottom:24px; }
+.mini-stat { flex:1; min-width:120px; background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:16px; text-align:center; }
+.mini-stat-val { font-size:24px; font-weight:800; color:var(--text); }
+.mini-stat-label { font-size:11px; color:var(--text4); margin-top:4px; }
+@media(max-width:600px){ .podium { gap:6px; } .podium-bar.p1{height:80px}.podium-bar.p2{height:60px}.podium-bar.p3{height:44px} }
+</style>
+</head>
+<body>
+<div id="toast-container"></div>
+<div id="app" class="app-layout">
+  <div class="main-content">
+    <header class="page-header">
+      <button class="hamburger-btn btn-ghost" id="hamburger-btn">☰</button>
+      <h1 class="ph-title">🏆 Мұғалімдер рейтингі</h1>
+    </header>
+    <div class="page-body page-enter" id="content"></div>
+  </div>
+</div>
+
+<script src="js/shared.js"></script>
+<script>
+if(!initApp()) throw '';
+injectSidebar(); buildSidebar(); initSidebar();
+
+let filterSubj = '';
+
+function starsHTML(avg) {
+  let h = '<div class="stars-inline">';
+  for(let i=1;i<=5;i++) h += `<span class="si ${i<=Math.round(avg)?'f':''}">★</span>`;
+  h += `<span style="font-size:12px;color:var(--text3);margin-left:4px">${(avg||0).toFixed(1)}</span>`;
+  return h + '</div>';
+}
+
+function render() {
+  let teachers = demoDB.get('teachers');
+  if(filterSubj) teachers = teachers.filter(t=>(t.subjects||[]).includes(filterSubj));
+  teachers = [...teachers].sort((a,b)=>(b.totalStars||0)-(a.totalStars||0));
+
+  const totalRatings = teachers.reduce((s,t)=>s+(t.starCount||0),0);
+  const avgRating = teachers.length ? (teachers.reduce((s,t)=>s+(t.stars||0),0)/teachers.length).toFixed(1) : '0';
+  const top = teachers[0];
+  const allSubjs = [...new Set(demoDB.get('teachers').flatMap(t=>t.subjects||[]))].sort();
+
+  const c = document.getElementById('content');
+
+  // Mini stats
+  let html = `<div class="stat-row">
+    <div class="mini-stat"><div class="mini-stat-val">${teachers.length}</div><div class="mini-stat-label">Мұғалім</div></div>
+    <div class="mini-stat"><div class="mini-stat-val">${totalRatings}</div><div class="mini-stat-label">Жалпы баға</div></div>
+    <div class="mini-stat"><div class="mini-stat-val">${avgRating}</div><div class="mini-stat-label">Орташа баға</div></div>
+    <div class="mini-stat"><div class="mini-stat-val">⭐ ${top?.totalStars||0}</div><div class="mini-stat-label">Ең көп жұлдыз</div></div>
+  </div>`;
+
+  // Subject filter
+  html += `<div class="card mb-16">
+    <div class="card-body">
+      <div class="filter-tabs">
+        <span class="filter-tab ${!filterSubj?'active':''}" onclick="setFilter('')">Барлық пән</span>
+        ${allSubjs.map(s=>`<span class="filter-tab ${filterSubj===s?'active':''}" onclick="setFilter('${s}')">${s}</span>`).join('')}
+      </div>
+    </div>
+  </div>`;
+
+  if(teachers.length === 0) {
+    html += `<div class="empty-state"><div class="empty-icon">🏆</div><div class="empty-title">Мұғалімдер табылмады</div></div>`;
+    c.innerHTML = html;
+    return;
+  }
+
+  // Podium (top 3)
+  const p1 = teachers[0], p2 = teachers[1], p3 = teachers[2];
+  html += `<div class="card" style="margin-bottom:24px">
+    <div class="card-header"><span class="card-title">🥇 Үздік мұғалімдер</span></div>
+    <div class="card-body">
+      <div class="podium">
+        ${p2?`<div class="podium-place">
+          <div class="podium-rank">🥈</div>
+          <div class="podium-avatar">${avatarDiv(p2.name,'','md')}</div>
+          <div class="podium-name">${p2.name||'—'}</div>
+          <div class="podium-stars">⭐ ${p2.totalStars||0}</div>
+          <div class="podium-bar p2">2</div>
+        </div>`:''}
+        ${p1?`<div class="podium-place">
+          <div class="podium-rank">🥇</div>
+          <div class="podium-avatar">
+            <div class="podium-crown">👑</div>
+            ${avatarDiv(p1.name,'','lg')}
+          </div>
+          <div class="podium-name">${p1.name||'—'}</div>
+          <div class="podium-stars">⭐ ${p1.totalStars||0}</div>
+          <div class="podium-bar p1">1</div>
+        </div>`:''}
+        ${p3?`<div class="podium-place">
+          <div class="podium-rank">🥉</div>
+          <div class="podium-avatar">${avatarDiv(p3.name,'','md')}</div>
+          <div class="podium-name">${p3.name||'—'}</div>
+          <div class="podium-stars">⭐ ${p3.totalStars||0}</div>
+          <div class="podium-bar p3">3</div>
+        </div>`:''}
+      </div>
+    </div>
+  </div>`;
+
+  // Full leaderboard table
+  const maxStars = teachers[0]?.totalStars || 1;
+  html += `<div class="card">
+    <div class="card-header"><span class="card-title">📊 Толық рейтинг кестесі</span></div>
+    <div class="table-wrapper" style="border:none;border-radius:0">
+      <table class="rank-table">
+        <thead><tr>
+          <th>#</th>
+          <th>Мұғалім</th>
+          <th>Пәндер</th>
+          <th>Орташа баға</th>
+          <th>Жұлдыз прогресі</th>
+          <th>Жалпы жұлдыз</th>
+          <th>Бағалар саны</th>
+          ${canRateTeacher() ? '<th>Әрекет</th>' : ''}
+        </tr></thead>
+        <tbody>
+          ${teachers.map((t,i)=>{
+            const pct = Math.round(((t.totalStars||0)/maxStars)*100);
+            const rankIcon = i===0?'🥇':i===1?'🥈':i===2?'🥉':`<span style="color:var(--text4)">${i+1}</span>`;
+            return `<tr>
+              <td class="rank-num">${rankIcon}</td>
+              <td>
+                <div style="display:flex;align-items:center;gap:10px">
+                  ${avatarDiv(t.name,'','sm')}
+                  <div>
+                    <div class="fw-600">${t.name||'—'}</div>
+                    <div class="text-xs text-muted">${(t.roles||[]).map(r=>ROLE_LABELS[r]||r).join(', ')}</div>
+                  </div>
+                </div>
+              </td>
+              <td><div class="text-sm text-muted">${(t.subjects||[]).slice(0,2).join(', ')+(t.subjects?.length>2?' +..':'')}</div></td>
+              <td>${starsHTML(t.stars||0)}</td>
+              <td style="min-width:120px">
+                <div class="star-bar"><div class="star-bar-fill" style="width:${pct}%"></div></div>
+                <div class="text-xs text-muted mt-4">${pct}%</div>
+              </td>
+              <td><span class="fw-700" style="color:var(--warning)">⭐ ${t.totalStars||0}</span></td>
+              <td class="text-muted">${t.starCount||0} баға</td>
+              ${canRateTeacher()?`<td><button class="btn btn-success btn-sm" onclick="quickRate('${t.id}','${(t.name||'').replace(/'/g,"\\'")}','${t.stars||0}')">⭐ Баға беру</button></td>`:''}
+            </tr>`;
+          }).join('')}
+        </tbody>
+      </table>
+    </div>
+  </div>`;
+
+  c.innerHTML = html;
+}
+
+function setFilter(subj) {
+  filterSubj = subj;
+  render();
+}
+
+// Quick rate modal (reuse teacher star modal approach inline)
+let _rateId = null, _rateSel = 0;
+function quickRate(id, name, cur) {
+  _rateId = id; _rateSel = 0;
+
+  // build modal if needed
+  let overlay = document.getElementById('rate-overlay');
+  if(!overlay) {
+    overlay = document.createElement('div');
+    overlay.id = 'rate-overlay';
+    overlay.className = 'modal-overlay';
+    overlay.innerHTML = `<div class="modal">
+      <div class="modal-header">
+        <div class="modal-title">⭐ Мұғалімді бағалау</div>
+        <button class="modal-close" onclick="closeModal('rate-overlay')">✕</button>
+      </div>
+      <div class="modal-body" id="rate-body"></div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeModal('rate-overlay')">Бас тарту</button>
+        <button class="btn btn-primary" onclick="submitRate()">⭐ Беру</button>
+      </div>
+    </div>`;
+    document.body.appendChild(overlay);
+    overlay.onclick = e => { if(e.target===overlay) closeModal('rate-overlay'); };
+  }
+
+  document.getElementById('rate-body').innerHTML = `
+    <div style="text-align:center;padding:8px 0 16px">
+      <div class="avatar avatar-lg" style="margin:0 auto 12px">${getInitials(name)}</div>
+      <div class="fw-700 mb-4">${name}</div>
+      <div class="text-muted text-sm mb-20">Мұғалімге жұлдыз беріңіз (1–5)</div>
+      <div style="display:flex;justify-content:center;gap:10px;margin-bottom:16px">
+        ${[1,2,3,4,5].map(i=>`<span id="rs${i}" onclick="pickRateStar(${i})" style="font-size:36px;cursor:pointer;color:var(--border);transition:transform .15s">★</span>`).join('')}
+      </div>
+      <div class="form-group" style="text-align:left">
+        <label class="form-label">Пікір (міндетті емес)</label>
+        <input id="rate-comment" class="form-control" placeholder="мыс: Сабақты қызықты өткізеді">
+      </div>
+    </div>`;
+  openModal('rate-overlay');
+}
+
+function pickRateStar(n) {
+  _rateSel = n;
+  for(let i=1;i<=5;i++){
+    const el=document.getElementById('rs'+i);
+    if(el){ el.style.color=i<=n?'#F59E0B':'var(--border)'; el.style.transform=i<=n?'scale(1.2)':'scale(1)'; }
+  }
+}
+
+function submitRate() {
+  if(!_rateSel){showToast('Жұлдыз санын таңдаңыз','error');return;}
+  const t=demoDB.find('teachers',_rateId);
+  if(!t) return;
+  const newCount=(t.starCount||0)+1;
+  const newTotal=(t.totalStars||0)+_rateSel;
+  const newAvg=Math.round(newTotal/newCount);
+  demoDB.update('teachers',_rateId,{stars:newAvg,starCount:newCount,totalStars:newTotal});
+  showToast(`${_rateSel} жұлдыз берілді! ⭐`,'success');
+  closeModal('rate-overlay');
+  render();
+}
+
+render();
+</script>
+</body>
+</html>
