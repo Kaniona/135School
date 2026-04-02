@@ -58,6 +58,10 @@ const SIDEBAR_HTML = `
     </div>
 
     <div class="nav-section-label">Мектеп өмірі</div>
+    <div class="nav-item" data-page="menu.html" onclick="location.href='menu.html'" data-roles="all">
+      <svg class="nav-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"/></svg>
+      Ас мәзірі
+    </div>
     <div class="nav-item" data-page="news.html" onclick="location.href='news.html'" data-roles="all">
       <svg class="nav-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 20H5a2 2 0 01-2-2V6a2 2 0 012-2h10a2 2 0 012 2v1m2 13a2 2 0 01-2-2V7m2 13a2 2 0 002-2V9a2 2 0 00-2-2h-2m-4-3H9M7 16h6M7 8h6v4H7V8z"/></svg>
       Жаңалықтар
@@ -347,5 +351,66 @@ document.addEventListener('DOMContentLoaded', () => {
   
   // Observe body for future dynamic additions
   uiObserver.observe(document.body, { childList: true, subtree: true });
+
+  // Activate WOW effects
+  injectWorldClassEffects();
 });
+
+// ============================================================
+// WORLD CLASS UX ENHANCEMENTS
+// ============================================================
+function injectWorldClassEffects() {
+  // 1. Ambient localized glow tracking on cards
+  document.addEventListener('mousemove', (e) => {
+    document.querySelectorAll('.card, .stat-card').forEach(card => {
+      const rect = card.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+      card.style.setProperty('--mouse-x', x + 'px');
+      card.style.setProperty('--mouse-y', y + 'px');
+    });
+  });
+
+  // 2. Ambient background blobs
+  const blobsHtml = `
+    <div style="position:fixed;top:-20%;left:-10%;width:60vw;height:60vw;background:var(--primary);filter:blur(200px);opacity:0.1;z-index:-5;border-radius:50%;pointer-events:none;animation: float 20s ease-in-out infinite;"></div>
+    <div style="position:fixed;bottom:-20%;right:-10%;width:50vw;height:50vw;background:var(--purple);filter:blur(200px);opacity:0.15;z-index:-5;border-radius:50%;pointer-events:none;animation: float 25s ease-in-out infinite reverse;"></div>
+  `;
+  document.body.insertAdjacentHTML('afterbegin', blobsHtml);
+
+  // 3. World-class ripple effect on buttons
+  const style = document.createElement('style');
+  style.innerHTML = `
+    @keyframes worldclass-ripple {
+      to { transform: scale(4); opacity: 0; }
+    }
+  `;
+  document.head.appendChild(style);
+
+  document.addEventListener('click', function(e) {
+    const btn = e.target.closest('.btn, .qa-btn');
+    if(btn) {
+      const rect = btn.getBoundingClientRect();
+      const circle = document.createElement('span');
+      const diam = Math.max(rect.width, rect.height);
+      const radius = diam / 2;
+      circle.style.width = circle.style.height = `${diam}px`;
+      circle.style.left = `${e.clientX - rect.left - radius}px`;
+      circle.style.top = `${e.clientY - rect.top - radius}px`;
+      circle.style.position = 'absolute';
+      circle.style.borderRadius = '50%';
+      circle.style.background = 'rgba(255, 255, 255, 0.25)';
+      circle.style.transform = 'scale(0)';
+      circle.style.animation = 'worldclass-ripple 0.6s cubic-bezier(0.4, 0, 0.2, 1)';
+      circle.style.pointerEvents = 'none';
+
+      // Ensure btn has relative positioning
+      if (getComputedStyle(btn).position === 'static') btn.style.position = 'relative';
+      btn.style.overflow = 'hidden';
+
+      btn.appendChild(circle);
+      setTimeout(() => { if (circle.parentNode === btn) circle.remove(); }, 600);
+    }
+  });
+}
 
